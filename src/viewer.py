@@ -483,10 +483,25 @@ def index():
                 });
                 const objectsList = Array.from(allObjects);
                 
-                // Get earliest and latest times
-                const times = group.segments.map(s => s.start_time).sort();
-                const firstTime = times[0];
-                const lastTime = group.segments.map(s => s.end_time).sort().reverse()[0];
+                // Parse date/time from filename (e.g., Fi9900P N-20260107-185348-1767808428216-7.mp4)
+                // Format: CameraType-YYYYMMDD-HHMMSS-timestamp-id.mp4
+                const filenameMatch = group.videoName.match(/-(\d{8})-(\d{6})-/);
+                let displayTime = '';
+                if (filenameMatch) {
+                    const dateStr = filenameMatch[1]; // 20260107
+                    const timeStr = filenameMatch[2]; // 185348
+                    const year = dateStr.substring(0, 4);
+                    const month = dateStr.substring(4, 6);
+                    const day = dateStr.substring(6, 8);
+                    const hour = timeStr.substring(0, 2);
+                    const min = timeStr.substring(2, 4);
+                    const sec = timeStr.substring(4, 6);
+                    displayTime = `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+                } else {
+                    // Fallback to segment times
+                    const times = group.segments.map(s => s.start_time).sort();
+                    displayTime = times[0];
+                }
                 
                 return `
                     <div class="event-card">
@@ -499,7 +514,7 @@ def index():
                             `).join('')}
                         </div>
                         <div class="event-info">
-                            <div class="event-time">${firstTime} → ${lastTime}</div>
+                            <div class="event-time">📅 ${displayTime}</div>
                             <div class="event-meta">📁 ${group.videoName}</div>
                             <div class="event-meta">🎬 ${group.segmentCount} motion segment${group.segmentCount > 1 ? 's' : ''}</div>
                             <div class="event-meta">⏱️ Total: ${group.totalDuration.toFixed(1)}s</div>
