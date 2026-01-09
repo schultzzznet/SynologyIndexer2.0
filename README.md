@@ -29,20 +29,39 @@ Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, an
 
 ### Deployment
 
+**Remote deployment (to Raspberry Pi):**
+```bash
+# Deploy to theinfracore (RPi5)
+ssh theinfracore 'cd ~/SynologyIndexer2.0 && git pull && bash deployments/deploy.sh 212'
+
+# Deploy second NAS
+ssh theinfracore 'cd ~/SynologyIndexer2.0 && git pull && bash deployments/deploy.sh 213'
+
+# Check status
+ssh theinfracore 'cd ~/SynologyIndexer2.0 && bash deployments/status.sh'
+```
+
+**Local deployment:**
 ```bash
 # Clone repository
 git clone https://github.com/schultzzznet/SynologyIndexer2.0.git
 cd SynologyIndexer2.0
 
 # Deploy NAS 212 (port 5050)
-./deployments/deploy.sh 212
+bash deployments/deploy.sh 212
 
 # Deploy NAS 213 (port 5051)
-./deployments/deploy.sh 213
+bash deployments/deploy.sh 213
 
 # Check status
-./deployments/status.sh
+bash deployments/status.sh
 ```
+
+The deploy.sh script:
+- Pulls latest code from GitHub
+- Stops existing containers
+- Rebuilds Docker images
+- Starts containers with docker-compose
 
 ## Configuration
 
@@ -147,12 +166,13 @@ If you need historical data:
 
 **Container won't start:**
 ```bash
-cd deployments/212
+ssh theinfracore
+cd ~/SynologyIndexer2.0/deployments/212
 docker compose logs
 ```
 
 **Database locked:**
-SQLite handles this automatically with ACID transactions. If persistent, check file permissions.
+SQLite handles this automatically with WAL mode and local storage. Data is stored in Docker volume, not NAS.
 
 **No motion detected:**
 Check logs for brightness values. Dark videos use adaptive thresholds.
@@ -160,19 +180,33 @@ Check logs for brightness values. Dark videos use adaptive thresholds.
 **High memory usage:**
 Reduce WORKERS in docker-compose.yml or lower memory limits.
 
+**UI shows statistics but no events:**
+Check that preview images are accessible:
+```bash
+ssh theinfracore 'sudo ls /var/lib/docker/volumes/212_motion-db-212/_data/previews/ | head'
+```
+
 ## Monitoring
 
 ```bash
 # Tail logs
-docker logs -f motion-detection-viewer-212
+ssh theinfracore 'docker logs -f motion-detection-viewer-212'
 
 # Database stats
-sqlite3 /mnt/nas-212/surveillance/_motion_report/motion_events.db \
-  "SELECT COUNT(*) FROM videos WHERE processed_at IS NOT NULL;"
+ssh theinfracore 'docker exec motion-detection-viewer-212 python3 -c "
+import sqlite3
+conn = sqlite3.connect(\"/data/motion_events.db\")
+cursor = conn.execute(\"SELECT COUNT(*) FROM videos WHERE processed_at IS NOT NULL\")
+print(\"Processed videos:\", cursor.fetchone()[0])
+cursor = conn.execute(\"SELECT COUNT(*) FROM motion_segments\")
+print(\"Motion segments:\", cursor.fetchone()[0])
+"'
 
-# Preview count
-sqlite3 /mnt/nas-212/surveillance/_motion_report/motion_events.db \
-  "SELECT SUM(preview_count) FROM motion_segments;"
+# Check Docker volume
+ssh theinfracore 'sudo ls -lh /var/lib/docker/volumes/212_motion-db-212/_data/'
+
+# API health check
+ssh theinfracore 'curl -s http://localhost:5050/api/statistics | python3 -m json.tool'
 ```
 
 ## License
