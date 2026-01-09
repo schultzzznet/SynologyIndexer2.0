@@ -298,16 +298,18 @@ def index():
     </div>
     
     <div class="filters">
-        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
+            <span style="color: #8b949e; font-size: 13px; margin-right: 5px;">Objects:</span>
             <button class="filter-btn active" onclick="setObjectFilter('')" data-filter="">All</button>
-            <button class="filter-btn" onclick="setObjectFilter('person')">👤 Person</button>
-            <button class="filter-btn" onclick="setObjectFilter('car')">🚗 Car</button>
-            <button class="filter-btn" onclick="setObjectFilter('cat')">🐱 Cat</button>
-            <button class="filter-btn" onclick="setObjectFilter('dog')">🐕 Dog</button>
-            <button class="filter-btn" onclick="setObjectFilter('bird')">🐦 Bird</button>
-            <button class="filter-btn" onclick="setObjectFilter('bicycle')">🚲 Bicycle</button>
-            <button class="filter-btn" onclick="setObjectFilter('motorcycle')">🏍️ Motorcycle</button>
-            <button class="filter-btn" onclick="setObjectFilter('truck')">🚚 Truck</button>
+            <button class="filter-btn" onclick="setObjectFilter('person')" data-filter="person">👤 Person</button>
+            <button class="filter-btn" onclick="setObjectFilter('car')" data-filter="car">🚗 Car</button>
+            <button class="filter-btn" onclick="setObjectFilter('cat')" data-filter="cat">🐱 Cat</button>
+            <button class="filter-btn" onclick="setObjectFilter('dog')" data-filter="dog">🐕 Dog</button>
+            <button class="filter-btn" onclick="setObjectFilter('bird')" data-filter="bird">🐦 Bird</button>
+            <button class="filter-btn" onclick="setObjectFilter('bicycle')" data-filter="bicycle">🚲 Bicycle</button>
+            <button class="filter-btn" onclick="setObjectFilter('motorcycle')" data-filter="motorcycle">🏍️ Motorcycle</button>
+            <button class="filter-btn" onclick="setObjectFilter('truck')" data-filter="truck">🚚 Truck</button>
+            <span style="color: #8b949e; font-size: 12px; margin-left: 10px; font-style: italic;">(Click multiple to filter)</span>
         </div>
     </div>
 
@@ -316,7 +318,7 @@ def index():
     <script>
         let allEvents = [];
         let rebuilding = false;
-        let currentObjectFilter = '';
+        let selectedObjectFilters = new Set(); // Multi-select
 
         async function loadStats() {
             const res = await fetch('/api/statistics');
@@ -368,15 +370,26 @@ def index():
         }
 
         function setObjectFilter(filter) {
-            currentObjectFilter = filter;
+            if (filter === '') {
+                // Clear all filters
+                selectedObjectFilters.clear();
+            } else {
+                // Toggle filter
+                if (selectedObjectFilters.has(filter)) {
+                    selectedObjectFilters.delete(filter);
+                } else {
+                    selectedObjectFilters.add(filter);
+                }
+            }
             
             // Update button states
             document.querySelectorAll('.filter-btn').forEach(btn => {
-                if (btn.getAttribute('data-filter') === filter || 
-                    (filter === '' && btn.textContent.includes('All'))) {
-                    btn.classList.add('active');
+                const btnFilter = btn.getAttribute('data-filter');
+                if (btnFilter === '') {
+                    // "All" button active when no filters selected
+                    btn.classList.toggle('active', selectedObjectFilters.size === 0);
                 } else {
-                    btn.classList.remove('active');
+                    btn.classList.toggle('active', selectedObjectFilters.has(btnFilter));
                 }
             });
             
@@ -391,12 +404,13 @@ def index():
                 // Search filter
                 const matchesSearch = !search || (e.video_path || '').toLowerCase().includes(search);
                 
-                // Object filter - check for exact word match in comma-separated list
+                // Object filter - check if segment has ANY of the selected objects
                 const hasObjects = e.detected_objects && e.detected_objects.trim() !== '';
-                let matchesObject = !currentObjectFilter;
-                if (currentObjectFilter && e.detected_objects) {
+                let matchesObject = selectedObjectFilters.size === 0; // If no filters, show all
+                if (selectedObjectFilters.size > 0 && e.detected_objects) {
                     const objectList = e.detected_objects.toLowerCase().split(',').map(o => o.trim());
-                    matchesObject = objectList.includes(currentObjectFilter);
+                    // Match if segment has ANY of the selected filters
+                    matchesObject = Array.from(selectedObjectFilters).some(filter => objectList.includes(filter));
                 }
                 
                 // Only with objects checkbox
