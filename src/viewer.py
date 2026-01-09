@@ -391,10 +391,13 @@ def index():
                 // Search filter
                 const matchesSearch = !search || (e.video_path || '').toLowerCase().includes(search);
                 
-                // Object filter
+                // Object filter - check for exact word match in comma-separated list
                 const hasObjects = e.detected_objects && e.detected_objects.trim() !== '';
-                const matchesObject = !currentObjectFilter || 
-                                    (e.detected_objects || '').toLowerCase().includes(currentObjectFilter);
+                let matchesObject = !currentObjectFilter;
+                if (currentObjectFilter && e.detected_objects) {
+                    const objectList = e.detected_objects.toLowerCase().split(',').map(o => o.trim());
+                    matchesObject = objectList.includes(currentObjectFilter);
+                }
                 
                 // Only with objects checkbox
                 const passesObjectCheck = !onlyWithObjects || hasObjects;
