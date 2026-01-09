@@ -433,16 +433,31 @@ def index():
                 const videoName = videoPath.split('/').pop();
                 const totalDuration = segments.reduce((sum, s) => sum + s.duration_sec, 0);
                 
-                // Get earliest time for sorting
-                const times = segments.map(s => new Date(s.start_time).getTime()).sort();
-                const earliestTime = times[0];
+                // Parse date/time from filename for sorting (e.g., Fi9900P N-20260107-185348-1767808428216-7.mp4)
+                const filenameMatch = videoName.match(/-(\d{8})-(\d{6})-/);
+                let videoTimestamp = 0;
+                if (filenameMatch) {
+                    const dateStr = filenameMatch[1]; // 20260107
+                    const timeStr = filenameMatch[2]; // 185348
+                    const year = dateStr.substring(0, 4);
+                    const month = dateStr.substring(4, 6);
+                    const day = dateStr.substring(6, 8);
+                    const hour = timeStr.substring(0, 2);
+                    const min = timeStr.substring(2, 4);
+                    const sec = timeStr.substring(4, 6);
+                    videoTimestamp = new Date(`${year}-${month}-${day}T${hour}:${min}:${sec}`).getTime();
+                } else {
+                    // Fallback to segment start_time
+                    const times = segments.map(s => new Date(s.start_time).getTime()).sort();
+                    videoTimestamp = times[0];
+                }
                 
                 return {
                     videoPath,
                     videoName,
                     segments,
                     totalDuration,
-                    earliestTime,
+                    videoTimestamp,
                     segmentCount: segments.length
                 };
             });
@@ -452,9 +467,9 @@ def index():
             groupedArray.sort((a, b) => {
                 switch(sortField) {
                     case 'time':
-                        return b.earliestTime - a.earliestTime;
+                        return b.videoTimestamp - a.videoTimestamp;
                     case 'time-asc':
-                        return a.earliestTime - b.earliestTime;
+                        return a.videoTimestamp - b.videoTimestamp;
                     case 'duration':
                         return b.totalDuration - a.totalDuration;
                     case 'duration-asc':
@@ -468,7 +483,7 @@ def index():
                     case 'name-desc':
                         return b.videoName.localeCompare(a.videoName);
                     default:
-                        return b.earliestTime - a.earliestTime;
+                        return b.videoTimestamp - a.videoTimestamp;
                 }
             });
 
