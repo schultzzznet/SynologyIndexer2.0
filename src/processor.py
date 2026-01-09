@@ -38,6 +38,16 @@ class MotionProcessor:
         # Scan for videos
         all_videos = self.scanner.scan_all_videos()
         
+        # Report initial count
+        if self.progress_callback:
+            self.progress_callback({
+                'total': len(all_videos),
+                'processed': 0,
+                'current_file': 'Scanning complete, starting processing...',
+                'has_motion': False,
+                'segments': 0
+            })
+        
         # Cleanup deleted videos from database
         existing_paths = {str(v.path) for v in all_videos}
         self.db.cleanup_deleted_videos(existing_paths)
@@ -81,6 +91,17 @@ class MotionProcessor:
         
         for i in range(0, len(videos), batch_size):
             batch = videos[i:i + batch_size]
+            
+            # Report batch start
+            if self.progress_callback and i > 0:
+                self.progress_callback({
+                    'total': total_videos,
+                    'processed': i,
+                    'current_file': f'Processing batch {i//batch_size + 1}...',
+                    'has_motion': False,
+                    'segments': 0
+                })
+            
             work_args = [(v, self.config) for v in batch]
             
             # Use initializer to load YOLO once per worker
@@ -100,6 +121,7 @@ class MotionProcessor:
                         'has_motion': len(segments) > 0,
                         'segments': len(segments)
                     })
+                    self.logger.debug(f"Progress callback: {current_count}/{total_videos} - {video.path.name}")
                 
                 self._save_results(video, segments, metadata, error)
             
