@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.log
+.DS_Store
+.env
+deployments/*/reports/
+*.db
+*.db-journal
+*.tmp
+*.bak

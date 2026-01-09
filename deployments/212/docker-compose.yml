@@ -1,0 +1,29 @@
+services:
+  motion-detector:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.arm
+    container_name: motion-detection-viewer-212
+    ports:
+      - "5050:5050"
+    volumes:
+      - /mnt/nas-212/surveillance:/data
+      - ./reports:/app/_motion_report
+    environment:
+      - SURVEILLANCE_ROOT=/data
+      - DEPLOYMENT_NAME=212
+      - WORKERS=2
+      - AUTOSCAN_INTERVAL=60
+    networks:
+      - motion-net-212
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    restart: unless-stopped
+
+networks:
+  motion-net-212:
+    driver: bridge
