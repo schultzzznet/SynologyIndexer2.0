@@ -282,8 +282,24 @@ def index():
     <div class="filters">
         <input type="text" class="filter-input" placeholder="Search video name..." 
                id="searchInput" oninput="filterEvents()" style="flex: 1;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <label style="color: #8b949e; font-size: 13px;">Sort by:</label>
+            <select class="filter-input" id="sortField" onchange="filterEvents()" style="width: auto;">
+                <option value="time">Time (newest first)</option>
+                <option value="time-asc">Time (oldest first)</option>
+                <option value="duration">Duration (longest)</option>
+                <option value="duration-asc">Duration (shortest)</option>
+                <option value="segments">Segment count (most)</option>
+                <option value="segments-asc">Segment count (least)</option>
+                <option value="name">Name (A→Z)</option>
+                <option value="name-desc">Name (Z→A)</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="filters">
         <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-            <button class="filter-btn" onclick="setObjectFilter('')" data-filter="">All</button>
+            <button class="filter-btn active" onclick="setObjectFilter('')" data-filter="">All</button>
             <button class="filter-btn" onclick="setObjectFilter('person')">👤 Person</button>
             <button class="filter-btn" onclick="setObjectFilter('car')">🚗 Car</button>
             <button class="filter-btn" onclick="setObjectFilter('cat')">🐱 Cat</button>
@@ -412,14 +428,55 @@ def index():
                 groupedEvents[e.video_path].push(e);
             });
 
-            // Render grouped tiles
-            container.innerHTML = Object.entries(groupedEvents).map(([videoPath, segments]) => {
+            // Convert to array for sorting
+            const groupedArray = Object.entries(groupedEvents).map(([videoPath, segments]) => {
                 const videoName = videoPath.split('/').pop();
                 const totalDuration = segments.reduce((sum, s) => sum + s.duration_sec, 0);
                 
+                // Get earliest time for sorting
+                const times = segments.map(s => new Date(s.start_time).getTime()).sort();
+                const earliestTime = times[0];
+                
+                return {
+                    videoPath,
+                    videoName,
+                    segments,
+                    totalDuration,
+                    earliestTime,
+                    segmentCount: segments.length
+                };
+            });
+
+            // Sort based on selected field
+            const sortField = document.getElementById('sortField').value;
+            groupedArray.sort((a, b) => {
+                switch(sortField) {
+                    case 'time':
+                        return b.earliestTime - a.earliestTime;
+                    case 'time-asc':
+                        return a.earliestTime - b.earliestTime;
+                    case 'duration':
+                        return b.totalDuration - a.totalDuration;
+                    case 'duration-asc':
+                        return a.totalDuration - b.totalDuration;
+                    case 'segments':
+                        return b.segmentCount - a.segmentCount;
+                    case 'segments-asc':
+                        return a.segmentCount - b.segmentCount;
+                    case 'name':
+                        return a.videoName.localeCompare(b.videoName);
+                    case 'name-desc':
+                        return b.videoName.localeCompare(a.videoName);
+                    default:
+                        return b.earliestTime - a.earliestTime;
+                }
+            });
+
+            // Render sorted tiles
+            container.innerHTML = groupedArray.map(group => {
                 // Collect all unique detected objects across segments
                 const allObjects = new Set();
-                segments.forEach(s => {
+                group.segments.forEach(s => {
                     if (s.detected_objects) {
                         s.detected_objects.split(',').map(o => o.trim()).filter(o => o).forEach(obj => allObjects.add(obj));
                     }
@@ -427,14 +484,14 @@ def index():
                 const objectsList = Array.from(allObjects);
                 
                 // Get earliest and latest times
-                const times = segments.map(s => s.start_time).sort();
+                const times = group.segments.map(s => s.start_time).sort();
                 const firstTime = times[0];
-                const lastTime = segments.map(s => s.end_time).sort().reverse()[0];
+                const lastTime = group.segments.map(s => s.end_time).sort().reverse()[0];
                 
                 return `
                     <div class="event-card">
                         <div class="preview-grid">
-                            ${segments.map(seg => `
+                            ${group.segments.map(seg => `
                                 <img class="event-preview" 
                                      src="/api/preview?path=${encodeURIComponent(seg.video_path)}&segment=${seg.segment_index}"
                                      alt="Preview" loading="lazy"
@@ -443,9 +500,9 @@ def index():
                         </div>
                         <div class="event-info">
                             <div class="event-time">${firstTime} → ${lastTime}</div>
-                            <div class="event-meta">📁 ${videoName}</div>
-                            <div class="event-meta">🎬 ${segments.length} motion segment${segments.length > 1 ? 's' : ''}</div>
-                            <div class="event-meta">⏱️ Total: ${totalDuration.toFixed(1)}s</div>
+                            <div class="event-meta">📁 ${group.videoName}</div>
+                            <div class="event-meta">🎬 ${group.segmentCount} motion segment${group.segmentCount > 1 ? 's' : ''}</div>
+                            <div class="event-meta">⏱️ Total: ${group.totalDuration.toFixed(1)}s</div>
                             ${objectsList.length > 0 ? `
                                 <div class="tags">
                                     ${objectsList.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
