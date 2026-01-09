@@ -297,18 +297,9 @@ def index():
         </div>
     </div>
     
-    <div class="filters">
+    <div class="filters" id="object-filters">
         <div style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
             <span style="color: #8b949e; font-size: 13px; margin-right: 5px;">Objects:</span>
-            <button class="filter-btn active" onclick="setObjectFilter('')" data-filter="">All</button>
-            <button class="filter-btn" onclick="setObjectFilter('person')" data-filter="person">👤 Person</button>
-            <button class="filter-btn" onclick="setObjectFilter('car')" data-filter="car">🚗 Car</button>
-            <button class="filter-btn" onclick="setObjectFilter('cat')" data-filter="cat">🐱 Cat</button>
-            <button class="filter-btn" onclick="setObjectFilter('dog')" data-filter="dog">🐕 Dog</button>
-            <button class="filter-btn" onclick="setObjectFilter('bird')" data-filter="bird">🐦 Bird</button>
-            <button class="filter-btn" onclick="setObjectFilter('bicycle')" data-filter="bicycle">🚲 Bicycle</button>
-            <button class="filter-btn" onclick="setObjectFilter('motorcycle')" data-filter="motorcycle">🏍️ Motorcycle</button>
-            <button class="filter-btn" onclick="setObjectFilter('truck')" data-filter="truck">🚚 Truck</button>
             <span style="color: #8b949e; font-size: 12px; margin-left: 10px; font-style: italic;">(Click multiple to filter)</span>
         </div>
     </div>
@@ -346,7 +337,75 @@ def index():
         async function loadEvents() {
             const res = await fetch('/api/events');
             allEvents = await res.json();
+            generateObjectFilters();
             filterEvents();
+        }
+        
+        function generateObjectFilters() {
+            // Collect all unique detected objects
+            const objectCounts = {};
+            allEvents.forEach(e => {
+                if (e.detected_objects) {
+                    e.detected_objects.split(',').map(o => o.trim()).filter(o => o).forEach(obj => {
+                        const objLower = obj.toLowerCase();
+                        objectCounts[objLower] = (objectCounts[objLower] || 0) + 1;
+                    });
+                }
+            });
+            
+            // Sort by frequency (most common first)
+            const sortedObjects = Object.entries(objectCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([obj, count]) => obj);
+            
+            // Object emoji mapping
+            const emojis = {
+                'person': '👤',
+                'car': '🚗',
+                'cat': '🐱',
+                'dog': '🐕',
+                'bird': '🐦',
+                'bicycle': '🚲',
+                'motorcycle': '🏍️',
+                'truck': '🚚',
+                'skateboard': '🛹',
+                'bus': '🚌',
+                'train': '🚆',
+                'horse': '🐴',
+                'bear': '🐻',
+                'backpack': '🎒'
+            };
+            
+            // Generate buttons
+            const container = document.getElementById('object-filters').querySelector('div');
+            const label = container.querySelector('span:first-child');
+            const hint = container.querySelector('span:last-child');
+            
+            // Clear existing buttons except label and hint
+            container.innerHTML = '';
+            container.appendChild(label);
+            
+            // Add "All" button
+            const allBtn = document.createElement('button');
+            allBtn.className = 'filter-btn active';
+            allBtn.setAttribute('data-filter', '');
+            allBtn.textContent = 'All';
+            allBtn.onclick = () => setObjectFilter('');
+            container.appendChild(allBtn);
+            
+            // Add buttons for each detected object
+            sortedObjects.forEach(obj => {
+                const btn = document.createElement('button');
+                btn.className = 'filter-btn';
+                btn.setAttribute('data-filter', obj);
+                const emoji = emojis[obj] || '🏷️';
+                const displayName = obj.charAt(0).toUpperCase() + obj.slice(1);
+                btn.innerHTML = `${emoji} ${displayName}`;
+                btn.onclick = () => setObjectFilter(obj);
+                container.appendChild(btn);
+            });
+            
+            container.appendChild(hint);
         }
         
         async function checkProcessingStatus() {
