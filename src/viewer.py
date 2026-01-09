@@ -165,7 +165,7 @@ def index():
         }
         .events-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
             gap: 20px;
         }
         .event-card {
@@ -179,11 +179,19 @@ def index():
             transform: translateY(-4px);
             border-color: #58a6ff;
         }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 4px;
+            padding: 4px;
+            background: #0d1117;
+        }
         .event-preview {
             width: 100%;
-            height: 200px;
+            height: 120px;
             object-fit: cover;
             background: #0d1117;
+            border-radius: 4px;
         }
         .event-info {
             padding: 15px;
@@ -355,24 +363,52 @@ def index():
                 return;
             }
 
-            container.innerHTML = events.map(e => {
-                const objects = e.detected_objects ? e.detected_objects.split(',').map(o => o.trim()).filter(o => o) : [];
-                const videoName = e.video_path.split('/').pop();
+            // Group events by video_path
+            const groupedEvents = {};
+            events.forEach(e => {
+                if (!groupedEvents[e.video_path]) {
+                    groupedEvents[e.video_path] = [];
+                }
+                groupedEvents[e.video_path].push(e);
+            });
+
+            // Render grouped tiles
+            container.innerHTML = Object.entries(groupedEvents).map(([videoPath, segments]) => {
+                const videoName = videoPath.split('/').pop();
+                const totalDuration = segments.reduce((sum, s) => sum + s.duration_sec, 0);
+                
+                // Collect all unique detected objects across segments
+                const allObjects = new Set();
+                segments.forEach(s => {
+                    if (s.detected_objects) {
+                        s.detected_objects.split(',').map(o => o.trim()).filter(o => o).forEach(obj => allObjects.add(obj));
+                    }
+                });
+                const objectsList = Array.from(allObjects);
+                
+                // Get earliest and latest times
+                const times = segments.map(s => s.start_time).sort();
+                const firstTime = times[0];
+                const lastTime = segments.map(s => s.end_time).sort().reverse()[0];
                 
                 return `
                     <div class="event-card">
-                        <img class="event-preview" 
-                             src="/api/preview?path=${encodeURIComponent(e.video_path)}&segment=${e.segment_index}"
-                             alt="Preview" loading="lazy"
-                             onerror="this.style.display='none';">
+                        <div class="preview-grid">
+                            ${segments.map(seg => `
+                                <img class="event-preview" 
+                                     src="/api/preview?path=${encodeURIComponent(seg.video_path)}&segment=${seg.segment_index}"
+                                     alt="Preview" loading="lazy"
+                                     onerror="this.style.display='none';">
+                            `).join('')}
+                        </div>
                         <div class="event-info">
-                            <div class="event-time">${e.start_time} - ${e.end_time}</div>
+                            <div class="event-time">${firstTime} → ${lastTime}</div>
                             <div class="event-meta">📁 ${videoName}</div>
-                            <div class="event-meta">⏱️ ${e.duration_sec.toFixed(1)}s</div>
-                            <div class="event-meta">📐 Area: ${e.max_motion_area}</div>
-                            ${objects.length > 0 ? `
+                            <div class="event-meta">🎬 ${segments.length} motion segment${segments.length > 1 ? 's' : ''}</div>
+                            <div class="event-meta">⏱️ Total: ${totalDuration.toFixed(1)}s</div>
+                            ${objectsList.length > 0 ? `
                                 <div class="tags">
-                                    ${objects.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
+                                    ${objectsList.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
                                 </div>
                             ` : ''}
                         </div>
