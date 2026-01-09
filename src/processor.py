@@ -19,11 +19,12 @@ _worker_detector = None
 class MotionProcessor:
     """Orchestrates the motion detection pipeline."""
     
-    def __init__(self, root_dir: Path, db_path: Path, config: Dict):
+    def __init__(self, root_dir: Path, db_path: Path, config: Dict, progress_callback=None):
         self.root_dir = root_dir
         self.db = DatabaseManager(db_path)
         self.scanner = VideoScanner(root_dir)
         self.config = config
+        self.progress_callback = progress_callback
         self.logger = logging.getLogger("processor")
     
     def run_scan(self):
@@ -76,6 +77,7 @@ class MotionProcessor:
     def _process_parallel(self, videos: list, workers: int):
         """Process videos in parallel, saving in batches."""
         batch_size = 50  # Save every 50 videos
+        total_videos = len(videos)
         
         for i in range(0, len(videos), batch_size):
             batch = videos[i:i + batch_size]
@@ -86,10 +88,22 @@ class MotionProcessor:
                 results = pool.starmap(process_video_worker, work_args)
             
             # Save batch results
-            for video, segments, metadata, error in results:
+            for idx, (video, segments, metadata, error) in enumerate(results):
+                current_count = i + idx + 1
+                
+                # Report progress via callback
+                if self.progress_callback:
+                    self.progress_callback({
+                        'total': total_videos,
+                        'processed': current_count,
+                        'current_file': video.path.name,
+                        'has_motion': len(segments) > 0,
+                        'segments': len(segments)
+                    })
+                
                 self._save_results(video, segments, metadata, error)
             
-            self.logger.info(f"Progress: {min(i + batch_size, len(videos))}/{len(videos)} videos")
+            self.logger.info(f"Progress: {min(i + batch_size, total_videos)}/{total_videos} videos")
     
     def _process_sequential(self, videos: list):
         """Process videos sequentially."""

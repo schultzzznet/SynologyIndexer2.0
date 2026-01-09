@@ -340,7 +340,12 @@ def index():
             
             if (status.running) {
                 statusDiv.style.display = 'block';
-                statusMessage.textContent = status.message || 'Processing videos...';
+                if (status.total && status.processed) {
+                    const percent = Math.round((status.processed / status.total) * 100);
+                    statusMessage.innerHTML = `${status.processed}/${status.total} (${percent}%) - ${status.current_file || 'Processing...'}`;
+                } else {
+                    statusMessage.textContent = status.message || 'Processing videos...';
+                }
             } else {
                 statusDiv.style.display = 'none';
             }
@@ -547,9 +552,15 @@ def api_rebuild():
     rebuild_status = {'running': True, 'message': 'Starting rebuild...', 'progress': 0}
     
     def run_rebuild():
+        def update_progress(progress):
+            rebuild_status['total'] = progress['total']
+            rebuild_status['processed'] = progress['processed']
+            rebuild_status['current_file'] = progress['current_file']
+            rebuild_status['message'] = f"Processing {progress['processed']}/{progress['total']}: {progress['current_file']}"
+        
         try:
             logger.info("Manual rebuild triggered")
-            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG)
+            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG, progress_callback=update_progress)
             processor.run_scan()
             rebuild_status['running'] = False
             rebuild_status['message'] = 'Rebuild complete'
@@ -582,12 +593,18 @@ def auto_scan_loop():
             logger.info("Auto-scan skipped (manual rebuild in progress)")
             continue
         
+        def update_progress(progress):
+            rebuild_status['total'] = progress['total']
+            rebuild_status['processed'] = progress['processed']
+            rebuild_status['current_file'] = progress['current_file']
+            rebuild_status['message'] = f"Processing {progress['processed']}/{progress['total']}: {progress['current_file']}"
+        
         try:
             logger.info("Auto-scan triggered")
             rebuild_status['running'] = True
             rebuild_status['message'] = 'Auto-scan in progress...'
             
-            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG)
+            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG, progress_callback=update_progress)
             processor.run_scan()
             
             rebuild_status['running'] = False
