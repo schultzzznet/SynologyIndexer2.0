@@ -387,53 +387,31 @@ def index():
             const search = document.getElementById('searchInput').value.toLowerCase();
             const onlyWithObjects = document.getElementById('onlyWithObjects').checked;
 
-            // Filter at the video level, not segment level
-            // Group all events by video first
-            const groupedEvents = {};
-            allEvents.forEach(e => {
-                if (!groupedEvents[e.video_path]) {
-                    groupedEvents[e.video_path] = [];
-                }
-                groupedEvents[e.video_path].push(e);
-            });
-
-            // Now filter videos based on whether ANY segment matches
-            const filteredVideoSegments = [];
-            Object.entries(groupedEvents).forEach(([videoPath, segments]) => {
-                const videoName = videoPath.toLowerCase();
+            const filtered = allEvents.filter(e => {
+                // Search filter
+                const matchesSearch = !search || (e.video_path || '').toLowerCase().includes(search);
                 
-                // Check if video name matches search
-                const matchesSearch = !search || videoName.includes(search);
-                
-                // Check if ANY segment has objects
-                const hasObjects = segments.some(s => s.detected_objects && s.detected_objects.trim() !== '');
-                
-                // Check if ANY segment has the filtered object
+                // Object filter - check for exact word match in comma-separated list
+                const hasObjects = e.detected_objects && e.detected_objects.trim() !== '';
                 let matchesObject = !currentObjectFilter;
-                if (currentObjectFilter) {
-                    matchesObject = segments.some(s => {
-                        if (!s.detected_objects) return false;
-                        const objectList = s.detected_objects.toLowerCase().split(',').map(o => o.trim());
-                        return objectList.includes(currentObjectFilter);
-                    });
+                if (currentObjectFilter && e.detected_objects) {
+                    const objectList = e.detected_objects.toLowerCase().split(',').map(o => o.trim());
+                    matchesObject = objectList.includes(currentObjectFilter);
                 }
                 
                 // Only with objects checkbox
                 const passesObjectCheck = !onlyWithObjects || hasObjects;
                 
-                // If this video passes all filters, include ALL its segments
-                if (matchesSearch && matchesObject && passesObjectCheck) {
-                    filteredVideoSegments.push(...segments);
-                }
+                return matchesSearch && matchesObject && passesObjectCheck;
             });
 
-            renderEvents(filteredVideoSegments);
+            renderEvents(filtered);
             
             // Update count
             const container = document.getElementById('events');
-            if (filteredVideoSegments.length > 0) {
-                const videoCount = new Set(filteredVideoSegments.map(e => e.video_path)).size;
-                const countMsg = `<p style="grid-column: 1/-1; text-align:center; color:#8b949e; margin-bottom: 20px;">Showing ${videoCount} videos (${filteredVideoSegments.length} segments)</p>`;
+            if (filtered.length > 0) {
+                const videoCount = new Set(filtered.map(e => e.video_path)).size;
+                const countMsg = `<p style="grid-column: 1/-1; text-align:center; color:#8b949e; margin-bottom: 20px;">Showing ${videoCount} videos (${filtered.length} segments)</p>`;
                 container.innerHTML = countMsg + container.innerHTML;
             }
         }
