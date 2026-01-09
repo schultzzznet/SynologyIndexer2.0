@@ -144,6 +144,25 @@ def index():
             border-radius: 6px;
             color: #c9d1d9;
         }
+        .filter-btn {
+            padding: 6px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            background: #30363d;
+            border-color: #58a6ff;
+        }
+        .filter-btn.active {
+            background: #1f6feb;
+            border-color: #1f6feb;
+            color: white;
+        }
         .events-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -225,14 +244,27 @@ def index():
     <div class="controls">
         <button class="btn" onclick="rebuild()">🔄 Rebuild Index</button>
         <button class="btn" onclick="refreshEvents()">↻ Refresh</button>
+        <label style="margin-left: 15px; color: #c9d1d9;">
+            <input type="checkbox" id="onlyWithObjects" onchange="filterEvents()" style="margin-right: 5px;">
+            Only show detected objects
+        </label>
         <span id="rebuild-status"></span>
     </div>
 
     <div class="filters">
         <input type="text" class="filter-input" placeholder="Search video name..." 
-               id="searchInput" oninput="filterEvents()">
-        <input type="text" class="filter-input" placeholder="Filter by object..." 
-               id="objectFilter" oninput="filterEvents()">
+               id="searchInput" oninput="filterEvents()" style="flex: 1;">
+        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+            <button class="filter-btn" onclick="setObjectFilter('')" data-filter="">All</button>
+            <button class="filter-btn" onclick="setObjectFilter('person')">👤 Person</button>
+            <button class="filter-btn" onclick="setObjectFilter('car')">🚗 Car</button>
+            <button class="filter-btn" onclick="setObjectFilter('cat')">🐱 Cat</button>
+            <button class="filter-btn" onclick="setObjectFilter('dog')">🐕 Dog</button>
+            <button class="filter-btn" onclick="setObjectFilter('bird')">🐦 Bird</button>
+            <button class="filter-btn" onclick="setObjectFilter('bicycle')">🚲 Bicycle</button>
+            <button class="filter-btn" onclick="setObjectFilter('motorcycle')">🏍️ Motorcycle</button>
+            <button class="filter-btn" onclick="setObjectFilter('truck')">🚚 Truck</button>
+        </div>
     </div>
 
     <div class="events-grid" id="events"></div>
@@ -240,6 +272,7 @@ def index():
     <script>
         let allEvents = [];
         let rebuilding = false;
+        let currentObjectFilter = '';
 
         async function loadStats() {
             const res = await fetch('/api/statistics');
@@ -270,17 +303,49 @@ def index():
             filterEvents();
         }
 
+        function setObjectFilter(filter) {
+            currentObjectFilter = filter;
+            
+            // Update button states
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.getAttribute('data-filter') === filter || 
+                    (filter === '' && btn.textContent.includes('All'))) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            filterEvents();
+        }
+
         function filterEvents() {
             const search = document.getElementById('searchInput').value.toLowerCase();
-            const objectFilter = document.getElementById('objectFilter').value.toLowerCase();
+            const onlyWithObjects = document.getElementById('onlyWithObjects').checked;
 
             const filtered = allEvents.filter(e => {
+                // Search filter
                 const matchesSearch = !search || (e.video_path || '').toLowerCase().includes(search);
-                const matchesObject = !objectFilter || (e.detected_objects || '').toLowerCase().includes(objectFilter);
-                return matchesSearch && matchesObject;
+                
+                // Object filter
+                const hasObjects = e.detected_objects && e.detected_objects.trim() !== '';
+                const matchesObject = !currentObjectFilter || 
+                                    (e.detected_objects || '').toLowerCase().includes(currentObjectFilter);
+                
+                // Only with objects checkbox
+                const passesObjectCheck = !onlyWithObjects || hasObjects;
+                
+                return matchesSearch && matchesObject && passesObjectCheck;
             });
 
             renderEvents(filtered);
+            
+            // Update count
+            const container = document.getElementById('events');
+            if (filtered.length > 0) {
+                const countMsg = `<p style="grid-column: 1/-1; text-align:center; color:#8b949e; margin-bottom: 20px;">Showing ${filtered.length} of ${allEvents.length} events</p>`;
+                container.innerHTML = countMsg + container.innerHTML;
+            }
         }
 
         function renderEvents(events) {
@@ -351,6 +416,9 @@ def index():
         // Initial load
         loadStats();
         loadEvents();
+        
+        // Set "All" as active by default
+        document.querySelector('.filter-btn[data-filter=""]').classList.add('active');
     </script>
 </body>
 </html>
