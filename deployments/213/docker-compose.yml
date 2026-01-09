@@ -7,10 +7,10 @@ services:
     ports:
       - "5051:5050"
     volumes:
-      - /mnt/nas-213/surveillance:/data
-      - ./reports:/app/_motion_report
+      - /mnt/nas-213/surveillance:/surveillance:ro  # Read-only surveillance footage
+      - motion-db-213:/data  # Local volume for database (NOT on NAS!)
     environment:
-      - SURVEILLANCE_ROOT=/data
+      - SURVEILLANCE_ROOT=/surveillance
       - DEPLOYMENT_NAME=213
       - WORKERS=2
       - AUTOSCAN_INTERVAL=60
@@ -23,6 +23,10 @@ services:
         reservations:
           memory: 2G
     restart: unless-stopped
+
+volumes:
+  motion-db-213:
+    driver: local
 
 networks:
   motion-net-213:

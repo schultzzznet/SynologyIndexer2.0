@@ -15,9 +15,10 @@ from processor import MotionProcessor
 
 
 # Configuration
-DATA_ROOT = Path(os.environ.get('SURVEILLANCE_ROOT', '/data'))
-DB_PATH = DATA_ROOT / '_motion_report' / 'motion_events.db'
-LOG_DIR = DATA_ROOT / '_logs'
+SURVEILLANCE_ROOT = Path(os.environ.get('SURVEILLANCE_ROOT', '/surveillance'))
+DATA_DIR = Path('/data')  # Local storage for database and logs
+DB_PATH = DATA_DIR / 'motion_events.db'
+LOG_DIR = DATA_DIR / 'logs'
 AUTOSCAN_INTERVAL = int(os.environ.get('AUTOSCAN_INTERVAL', '60'))
 WORKERS = int(os.environ.get('WORKERS', '2'))
 
@@ -400,7 +401,7 @@ def api_rebuild():
     def run_rebuild():
         try:
             logger.info("Manual rebuild triggered")
-            processor = MotionProcessor(DATA_ROOT, DB_PATH, DETECTION_CONFIG)
+            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG)
             processor.run_scan()
             rebuild_status['running'] = False
             rebuild_status['message'] = 'Rebuild complete'
@@ -438,7 +439,7 @@ def auto_scan_loop():
             rebuild_status['running'] = True
             rebuild_status['message'] = 'Auto-scan in progress...'
             
-            processor = MotionProcessor(DATA_ROOT, DB_PATH, DETECTION_CONFIG)
+            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG)
             processor.run_scan()
             
             rebuild_status['running'] = False
@@ -453,7 +454,8 @@ def auto_scan_loop():
 if __name__ == '__main__':
     logger.info("="*70)
     logger.info("Motion Detection Viewer 2.0 Starting")
-    logger.info(f"Data root: {DATA_ROOT}")
+    logger.info(f"Surveillance root: {SURVEILLANCE_ROOT}")
+    logger.info(f"Data directory: {DATA_DIR}")
     logger.info(f"Database: {DB_PATH}")
     logger.info(f"Workers: {WORKERS}")
     logger.info(f"Auto-scan interval: {AUTOSCAN_INTERVAL}s")
