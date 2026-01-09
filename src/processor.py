@@ -12,6 +12,9 @@ from database import DatabaseManager
 from scanner import VideoScanner, VideoFile
 from detector import MotionDetector, format_time
 
+# Global detector instance for worker processes (initialized once per worker)
+_worker_detector = None
+
 
 class MotionProcessor:
     """Orchestrates the motion detection pipeline."""
@@ -78,7 +81,8 @@ class MotionProcessor:
             batch = videos[i:i + batch_size]
             work_args = [(v, self.config) for v in batch]
             
-            with Pool(processes=workers) as pool:
+            # Use initializer to load YOLO once per worker
+            with Pool(processes=workers, initializer=init_worker, initargs=(self.config,)) as pool:
                 results = pool.starmap(process_video_worker, work_args)
             
             # Save batch results
@@ -134,13 +138,21 @@ class MotionProcessor:
             self.logger.info(f"{video.path.name}: No motion detected")
 
 
+def init_worker(config: Dict):
+    """Initialize worker process with a reusable detector instance."""
+    global _worker_detector
+    _worker_detector = MotionDetector(config)
+
+
 def process_video_worker(video: VideoFile, config: Dict):
-    """Worker function for parallel processing."""
+    """Worker function for parallel processing - reuses detector from init_worker."""
+    global _worker_detector
+    
     try:
         start_time = time.time()
         
-        detector = MotionDetector(config)
-        segments, metadata = detector.analyze_video(video.path)
+        # Reuse the detector that was initialized once for this worker
+        segments, metadata = _worker_detector.analyze_video(video.path)
         
         metadata["processing_duration"] = time.time() - start_time
         
