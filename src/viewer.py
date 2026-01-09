@@ -379,11 +379,13 @@ def api_preview():
     if not video_path:
         return "Missing path", 400
     
+    # Previews are stored in /data/previews/
+    preview_dir = DATA_DIR / "previews"
     video_path_obj = Path(video_path)
     pattern = f"{video_path_obj.stem}_seg{segment_index:03d}_*.jpg"
     
     # Find first matching preview
-    for preview in video_path_obj.parent.glob(pattern):
+    for preview in preview_dir.glob(pattern):
         return send_file(str(preview), mimetype='image/jpeg')
     
     return "Preview not found", 404
