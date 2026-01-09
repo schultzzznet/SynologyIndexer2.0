@@ -85,47 +85,33 @@ class MotionProcessor:
         self.logger.info("="*70)
     
     def _process_parallel(self, videos: list, workers: int):
-        """Process videos in parallel, saving in batches."""
-        batch_size = 50  # Save every 50 videos
+        """Process videos in parallel with real-time progress updates."""
         total_videos = len(videos)
+        processed_count = 0
         
-        for i in range(0, len(videos), batch_size):
-            batch = videos[i:i + batch_size]
-            
-            # Report batch start
-            if self.progress_callback and i > 0:
-                self.progress_callback({
-                    'total': total_videos,
-                    'processed': i,
-                    'current_file': f'Processing batch {i//batch_size + 1}...',
-                    'has_motion': False,
-                    'segments': 0
-                })
-            
-            work_args = [(v, self.config) for v in batch]
-            
-            # Use initializer to load YOLO once per worker
-            with Pool(processes=workers, initializer=init_worker, initargs=(self.config,)) as pool:
-                results = pool.starmap(process_video_worker, work_args)
-            
-            # Save batch results
-            for idx, (video, segments, metadata, error) in enumerate(results):
-                current_count = i + idx + 1
+        # Process all videos with a persistent pool for real-time updates
+        work_args = [(v, self.config) for v in videos]
+        
+        with Pool(processes=workers, initializer=init_worker, initargs=(self.config,)) as pool:
+            # Use imap_unordered to get results as they complete (not in order)
+            for video, segments, metadata, error in pool.imap_unordered(process_video_worker_wrapper, work_args, chunksize=1):
+                processed_count += 1
                 
                 # Report progress via callback
                 if self.progress_callback:
                     self.progress_callback({
                         'total': total_videos,
-                        'processed': current_count,
+                        'processed': processed_count,
                         'current_file': video.path.name,
                         'has_motion': len(segments) > 0,
                         'segments': len(segments)
                     })
-                    self.logger.debug(f"Progress callback: {current_count}/{total_videos} - {video.path.name}")
                 
                 self._save_results(video, segments, metadata, error)
-            
-            self.logger.info(f"Progress: {min(i + batch_size, total_videos)}/{total_videos} videos")
+                
+                # Log progress every 50 videos
+                if processed_count % 50 == 0:
+                    self.logger.info(f"Progress: {processed_count}/{total_videos} videos")
     
     def _process_sequential(self, videos: list):
         """Process videos sequentially."""
@@ -196,3 +182,9 @@ def process_video_worker(video: VideoFile, config: Dict):
     
     except Exception as e:
         return video, [], {}, str(e)
+
+
+def process_video_worker_wrapper(args):
+    """Wrapper for imap_unordered - unpacks tuple arguments."""
+    video, config = args
+    return process_video_worker(video, config)
