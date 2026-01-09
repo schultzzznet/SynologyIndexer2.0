@@ -71,15 +71,20 @@ class MotionProcessor:
         self.logger.info("="*70)
     
     def _process_parallel(self, videos: list, workers: int):
-        """Process videos in parallel."""
+        """Process videos in parallel with incremental saving."""
         work_args = [(v, self.config) for v in videos]
         
         with Pool(processes=workers) as pool:
-            results = pool.starmap(process_video_worker, work_args)
-        
-        # Save results to database
-        for video, segments, metadata, error in results:
-            self._save_results(video, segments, metadata, error)
+            # Use imap_unordered for incremental results as they complete
+            results = pool.imap_unordered(
+                lambda args: process_video_worker(*args),
+                work_args,
+                chunksize=1
+            )
+            
+            # Save each result as it completes
+            for video, segments, metadata, error in results:
+                self._save_results(video, segments, metadata, error)
     
     def _process_sequential(self, videos: list):
         """Process videos sequentially."""
