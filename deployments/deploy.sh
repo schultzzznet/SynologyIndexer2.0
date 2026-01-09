@@ -9,7 +9,10 @@ if [ -z "$DEPLOYMENT_NAME" ]; then
     exit 1
 fi
 
-DEPLOYMENT_DIR="deployments/$DEPLOYMENT_NAME"
+# Get absolute path to repo root (where this script's parent is)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+DEPLOYMENT_DIR="$REPO_ROOT/deployments/$DEPLOYMENT_NAME"
 
 if [ ! -d "$DEPLOYMENT_DIR" ]; then
     echo "❌ Deployment directory not found: $DEPLOYMENT_DIR"
@@ -20,7 +23,8 @@ echo "=========================================="
 echo "🚀 Deploying: $DEPLOYMENT_NAME"
 echo "=========================================="
 
-# Pull latest code
+# Pull latest code from repo root
+cd "$REPO_ROOT"
 echo "📥 Pulling latest changes from git..."
 git pull
 echo "📝 Current commit: $(git rev-parse --short HEAD)"
@@ -54,5 +58,3 @@ fi
 echo ""
 echo "📊 Container status:"
 docker compose ps
-
-cd ../..
