@@ -40,8 +40,8 @@ class MotionDetector:
         
         if HAS_YOLO and config.get("enable_yolo", True):
             try:
-                self.yolo_model = YOLO("yolov8n.pt")
-                self.logger.info("YOLO model loaded")
+                self.yolo_model = YOLO("yolov8m.pt")
+                self.logger.info("YOLO model loaded (yolov8m)")
             except Exception as e:
                 self.logger.warning(f"Failed to load YOLO: {e}")
     
