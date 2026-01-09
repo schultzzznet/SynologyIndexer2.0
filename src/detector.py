@@ -34,6 +34,10 @@ class MotionDetector:
         self.logger = logging.getLogger("detector")
         self.yolo_model = None
         
+        # Setup preview directory
+        self.preview_dir = Path(config.get("preview_dir", "/data/previews"))
+        self.preview_dir.mkdir(parents=True, exist_ok=True)
+        
         if HAS_YOLO and config.get("enable_yolo", True):
             try:
                 self.yolo_model = YOLO("yolov8n.pt")
@@ -182,8 +186,7 @@ class MotionDetector:
         if duration < min_duration:
             return None
         
-        # Save preview images
-        preview_dir = video_path.parent
+        # Save preview images to local storage (not NAS)
         stem = video_path.stem
         saved_previews = []
         
@@ -191,7 +194,7 @@ class MotionDetector:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
             ret, frame = cap.read()
             if ret:
-                preview_path = preview_dir / f"{stem}_seg{len(saved_previews):03d}_f{frame_num}.jpg"
+                preview_path = self.preview_dir / f"{stem}_seg{len(saved_previews):03d}_f{frame_num}.jpg"
                 cv2.imwrite(str(preview_path), frame)
                 saved_previews.append(frame_num)
         

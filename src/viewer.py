@@ -32,7 +32,8 @@ DETECTION_CONFIG = {
     "background_var_threshold": 16,
     "end_grace_frames": 6,
     "min_segment_duration": 0.5,
-    "enable_yolo": True
+    "enable_yolo": True,
+    "preview_dir": str(DATA_DIR / "previews")
 }
 
 # Setup logging
