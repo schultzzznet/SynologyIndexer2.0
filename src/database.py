@@ -22,56 +22,65 @@ class DatabaseManager:
     
     def _init_database(self):
         """Initialize database schema with proper indexes."""
-        try:
-            with self.transaction() as conn:
-                # Videos table - tracks all scanned videos and processing state
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS videos (
-                        video_hash TEXT PRIMARY KEY,
-                        video_path TEXT UNIQUE NOT NULL,
-                        file_size INTEGER NOT NULL,
-                        last_modified INTEGER NOT NULL,
-                        processed_at TEXT,
-                        processing_duration_sec REAL,
-                        has_motion BOOLEAN NOT NULL DEFAULT 0,
-                        error_message TEXT
-                    )
-                """)
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                with self.transaction() as conn:
+                    # Videos table - tracks all scanned videos and processing state
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS videos (
+                            video_hash TEXT PRIMARY KEY,
+                            video_path TEXT UNIQUE NOT NULL,
+                            file_size INTEGER NOT NULL,
+                            last_modified INTEGER NOT NULL,
+                            processed_at TEXT,
+                            processing_duration_sec REAL,
+                            has_motion BOOLEAN NOT NULL DEFAULT 0,
+                            error_message TEXT
+                        )
+                    """)
+                    
+                    # Motion segments table - stores detected motion events
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS motion_segments (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            video_hash TEXT NOT NULL,
+                            segment_index INTEGER NOT NULL,
+                            start_time TEXT NOT NULL,
+                            end_time TEXT NOT NULL,
+                            duration_sec REAL NOT NULL,
+                            max_motion_area INTEGER NOT NULL,
+                            detected_objects TEXT,
+                            preview_count INTEGER NOT NULL DEFAULT 0,
+                            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (video_hash) REFERENCES videos(video_hash) ON DELETE CASCADE,
+                            UNIQUE(video_hash, segment_index)
+                        )
+                    """)
+                    
+                    # Indexes for fast queries
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_path ON videos(video_path)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_processed ON videos(processed_at)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_has_motion ON videos(has_motion)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_video ON motion_segments(video_hash)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_created ON motion_segments(created_at)")
+                    
+                self.logger.info(f"Database initialized: {self.db_path}")
+                break  # Success!
                 
-                # Motion segments table - stores detected motion events
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS motion_segments (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        video_hash TEXT NOT NULL,
-                        segment_index INTEGER NOT NULL,
-                        start_time TEXT NOT NULL,
-                        end_time TEXT NOT NULL,
-                        duration_sec REAL NOT NULL,
-                        max_motion_area INTEGER NOT NULL,
-                        detected_objects TEXT,
-                        preview_count INTEGER NOT NULL DEFAULT 0,
-                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (video_hash) REFERENCES videos(video_hash) ON DELETE CASCADE,
-                        UNIQUE(video_hash, segment_index)
-                    )
-                """)
-                
-                # Indexes for fast queries
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_path ON videos(video_path)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_processed ON videos(processed_at)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_has_motion ON videos(has_motion)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_video ON motion_segments(video_hash)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_created ON motion_segments(created_at)")
-                
-            self.logger.info(f"Database initialized: {self.db_path}")
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e):
-                # Another process is initializing, wait and retry
-                self.logger.warning("Database locked during init, retrying...")
-                time.sleep(1)
-                self._init_database()
-            else:
-                raise
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        self.logger.warning(f"Database locked during init, retrying ({retry_count}/{max_retries})...")
+                        time.sleep(2 ** retry_count)  # Exponential backoff: 2s, 4s, 8s
+                    else:
+                        self.logger.error("Database init failed after max retries")
+                        raise
+                else:
+                    raise
     
     @contextmanager
     def transaction(self):
