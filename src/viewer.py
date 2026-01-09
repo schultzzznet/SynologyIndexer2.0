@@ -226,6 +226,22 @@ def index():
             background: #1f6feb;
             color: white;
         }
+        .processing-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #238636;
+            color: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
         .progress-bar {
             width: 100%;
             height: 4px;
@@ -242,6 +258,10 @@ def index():
     </style>
 </head>
 <body>
+    <div id="processing-status" class="processing-status" style="display:none;">
+        <strong>⚙️ Processing:</strong> <span id="status-message">Scanning...</span>
+    </div>
+    
     <div class="header">
         <h1>🎥 Motion Detection Viewer 2.0</h1>
         <p>SQLite-powered surveillance event browser</p>
@@ -309,6 +329,21 @@ def index():
             const res = await fetch('/api/events');
             allEvents = await res.json();
             filterEvents();
+        }
+        
+        async function checkProcessingStatus() {
+            const res = await fetch('/api/rebuild/status');
+            const status = await res.json();
+            
+            const statusDiv = document.getElementById('processing-status');
+            const statusMessage = document.getElementById('status-message');
+            
+            if (status.running) {
+                statusDiv.style.display = 'block';
+                statusMessage.textContent = status.message || 'Processing videos...';
+            } else {
+                statusDiv.style.display = 'none';
+            }
         }
 
         function setObjectFilter(filter) {
@@ -444,14 +479,19 @@ def index():
         async function refreshEvents() {
             await loadStats();
             await loadEvents();
+            await checkProcessingStatus();
         }
 
         // Auto-refresh every 30 seconds
         setInterval(refreshEvents, 30000);
+        
+        // Check processing status more frequently (every 5 seconds)
+        setInterval(checkProcessingStatus, 5000);
 
         // Initial load
         loadStats();
         loadEvents();
+        checkProcessingStatus();
         
         // Set "All" as active by default
         document.querySelector('.filter-btn[data-filter=""]').classList.add('active');
