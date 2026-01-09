@@ -68,6 +68,7 @@ class MotionDetector:
         
         segments = []
         current_segment = None
+        segment_counter = 0  # Track segment index for preview naming
         frame_idx = 0
         sample_every = self.config.get("sample_every_n_frames", 2)
         
@@ -124,14 +125,16 @@ class MotionDetector:
                 current_segment["grace_counter"] += 1
                 if current_segment["grace_counter"] >= self.config.get("end_grace_frames", 6):
                     # End segment
-                    segment = self._finalize_segment(current_segment, current_time, video_path, cap)
+                    segment_counter += 1
+                    segment = self._finalize_segment(current_segment, current_time, video_path, cap, segment_counter)
                     if segment:
                         segments.append(segment)
                     current_segment = None
         
         # Finalize last segment if exists
         if current_segment is not None:
-            segment = self._finalize_segment(current_segment, frame_idx / fps, video_path, cap)
+            segment_counter += 1
+            segment = self._finalize_segment(current_segment, frame_idx / fps, video_path, cap, segment_counter)
             if segment:
                 segments.append(segment)
         
@@ -178,7 +181,7 @@ class MotionDetector:
             }
     
     def _finalize_segment(self, segment_data: Dict, end_time: float, 
-                         video_path: Path, cap: cv2.VideoCapture) -> Optional[MotionSegment]:
+                         video_path: Path, cap: cv2.VideoCapture, segment_index: int) -> Optional[MotionSegment]:
         """Finalize a motion segment and generate previews."""
         duration = end_time - segment_data["start_time"]
         min_duration = self.config.get("min_segment_duration", 0.5)
@@ -194,7 +197,7 @@ class MotionDetector:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
             ret, frame = cap.read()
             if ret:
-                preview_path = self.preview_dir / f"{stem}_seg{len(saved_previews):03d}_f{frame_num}.jpg"
+                preview_path = self.preview_dir / f"{stem}_seg{segment_index:03d}_f{frame_num}.jpg"
                 cv2.imwrite(str(preview_path), frame)
                 saved_previews.append(frame_num)
         
