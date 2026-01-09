@@ -275,8 +275,8 @@ def index():
             const objectFilter = document.getElementById('objectFilter').value.toLowerCase();
 
             const filtered = allEvents.filter(e => {
-                const matchesSearch = !search || e.video_path.toLowerCase().includes(search);
-                const matchesObject = !objectFilter || e.detected_objects.toLowerCase().includes(objectFilter);
+                const matchesSearch = !search || (e.video_path || '').toLowerCase().includes(search);
+                const matchesObject = !objectFilter || (e.detected_objects || '').toLowerCase().includes(objectFilter);
                 return matchesSearch && matchesObject;
             });
 
@@ -298,7 +298,8 @@ def index():
                     <div class="event-card">
                         <img class="event-preview" 
                              src="/api/preview?path=${encodeURIComponent(e.video_path)}&segment=${e.segment_index}"
-                             alt="Preview" loading="lazy">
+                             alt="Preview" loading="lazy"
+                             onerror="this.style.display='none';">
                         <div class="event-info">
                             <div class="event-time">${e.start_time} - ${e.end_time}</div>
                             <div class="event-meta">📁 ${videoName}</div>
@@ -306,7 +307,7 @@ def index():
                             <div class="event-meta">📐 Area: ${e.max_motion_area}</div>
                             ${objects.length > 0 ? `
                                 <div class="tags">
-                                    ${objects.map(obj => `<span class="tag">${obj}</span>`).join('')}
+                                    ${objects.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
                                 </div>
                             ` : ''}
                         </div>
