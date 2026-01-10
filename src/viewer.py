@@ -381,12 +381,14 @@ def index():
             
             // Generate buttons
             const container = document.getElementById('object-filters').querySelector('div');
-            const label = container.querySelector('span:first-child');
-            const hint = container.querySelector('span:last-child');
             
-            // Clear existing buttons except label and hint
-            container.innerHTML = '';
-            container.appendChild(label);
+            // Clear existing buttons (keep only label and hint spans)
+            const buttons = container.querySelectorAll('button');
+            buttons.forEach(btn => btn.remove());
+            
+            // Get the hint span (last one) so we can insert before it
+            const spans = container.querySelectorAll('span');
+            const hintSpan = spans[spans.length - 1];
             
             // Add "All" button
             const allBtn = document.createElement('button');
@@ -394,7 +396,7 @@ def index():
             allBtn.setAttribute('data-filter', '');
             allBtn.textContent = 'All';
             allBtn.onclick = () => setObjectFilter('');
-            container.appendChild(allBtn);
+            container.insertBefore(allBtn, hintSpan);
             
             // Add buttons for each detected object
             sortedObjects.forEach(obj => {
@@ -405,10 +407,8 @@ def index():
                 const displayName = obj.charAt(0).toUpperCase() + obj.slice(1);
                 btn.innerHTML = `${emoji} ${displayName}`;
                 btn.onclick = () => setObjectFilter(obj);
-                container.appendChild(btn);
+                container.insertBefore(btn, hintSpan);
             });
-            
-            container.appendChild(hint);
         }
         
         async function checkProcessingStatus() {
@@ -702,9 +702,6 @@ def index():
         loadStats();
         loadEvents();
         checkProcessingStatus();
-        
-        // Set "All" as active by default
-        document.querySelector('.filter-btn[data-filter=""]').classList.add('active');
     </script>
 </body>
 </html>
