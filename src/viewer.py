@@ -715,14 +715,22 @@ def index():
 def api_statistics():
     """Get processing statistics."""
     stats = db.get_statistics()
-    return jsonify(stats)
+    response = jsonify(stats)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/api/events')
 def api_events():
     """Get all motion events."""
     events = db.get_all_motion_events()
-    return jsonify(events)
+    response = jsonify(events)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/api/preview')
