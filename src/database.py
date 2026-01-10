@@ -28,6 +28,25 @@ class DatabaseManager:
         while retry_count < max_retries:
             try:
                 with self.transaction() as conn:
+                    # Check if videos table exists and migrate if needed
+                    cursor = conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='videos'"
+                    )
+                    table_exists = cursor.fetchone() is not None
+                    
+                    if table_exists:
+                        # Check if validated_at column exists
+                        cursor = conn.execute("PRAGMA table_info(videos)")
+                        columns = {row[1] for row in cursor.fetchall()}
+                        
+                        # Add missing columns if needed
+                        if 'validated_at' not in columns:
+                            self.logger.info("Migrating database: adding validated_at column")
+                            conn.execute("ALTER TABLE videos ADD COLUMN validated_at TEXT")
+                        if 'validated_model' not in columns:
+                            self.logger.info("Migrating database: adding validated_model column")
+                            conn.execute("ALTER TABLE videos ADD COLUMN validated_model TEXT")
+                    
                     # Videos table - tracks all scanned videos and processing state
                     conn.execute("""
                         CREATE TABLE IF NOT EXISTS videos (
