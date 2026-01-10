@@ -663,8 +663,8 @@ def index():
             if (rebuilding) return;
             
             const confirmed = confirm(
-                'This will re-scan videos with rare objects (bear, bed, horse, etc.) using YOLOv8x for accuracy validation.\n\n' +
-                'This process is slow but ensures quality detections.\n\nContinue?'
+                'This will re-scan videos with rare objects (bear, bed, horse, etc.) using YOLOv8x for accuracy validation.\\n\\n' +
+                'This process is slow but ensures quality detections.\\n\\nContinue?'
             );
             
             if (!confirmed) return;
