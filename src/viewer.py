@@ -338,10 +338,20 @@ def index():
         }
 
         async function loadEvents() {
-            const res = await fetch('/api/events');
-            allEvents = await res.json();
-            generateObjectFilters();
-            filterEvents();
+            try {
+                const res = await fetch('/api/events');
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                allEvents = await res.json();
+                console.log(`Loaded ${allEvents.length} events`);
+                generateObjectFilters();
+                filterEvents();
+            } catch (error) {
+                console.error('Error loading events:', error);
+                document.getElementById('events').innerHTML = 
+                    '<p style="grid-column: 1/-1; text-align:center; color:#ff6b6b;">Error loading events: ' + error.message + '</p>';
+            }
         }
         
         function generateObjectFilters() {
@@ -493,6 +503,7 @@ def index():
         }
 
         function renderEvents(events) {
+            console.log(`Rendering ${events.length} events`);
             const container = document.getElementById('events');
             if (events.length === 0) {
                 container.innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:#8b949e;">No motion events found</p>';
