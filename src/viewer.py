@@ -710,9 +710,11 @@ def index():
         setInterval(checkProcessingStatus, 5000);
 
         // Initial load
+        console.log('Starting initial load...');
         loadStats();
         loadEvents();
         checkProcessingStatus();
+        console.log('Initial load triggered');
     </script>
 </body>
 </html>
