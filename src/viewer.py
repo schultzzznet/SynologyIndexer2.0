@@ -614,27 +614,36 @@ def index():
                 }
                 
                 return `
-                    <a href="/api/video?path=${encodeURIComponent(group.videoPath)}" class="event-card" target="_blank">
-                        <div class="preview-grid">
-                            ${group.segments.map(seg => `
-                                <img class="event-preview" 
-                                     src="/api/preview?path=${encodeURIComponent(seg.video_path)}&segment=${seg.segment_index}"
-                                     alt="Preview" loading="lazy"
-                                     onerror="this.style.display='none';">
-                            `).join('')}
+                    <div class="event-card">
+                        <a href="/api/video?path=${encodeURIComponent(group.videoPath)}" target="_blank" style="display: block; text-decoration: none; color: inherit;">
+                            <div class="preview-grid">
+                                ${group.segments.map(seg => `
+                                    <img class="event-preview" 
+                                         src="/api/preview?path=${encodeURIComponent(seg.video_path)}&segment=${seg.segment_index}"
+                                         alt="Preview" loading="lazy"
+                                         onerror="this.style.display='none';">
+                                `).join('')}
+                            </div>
+                            <div class="event-info">
+                                <div class="event-time">📅 ${displayTime}</div>
+                                <div class="event-meta">📁 ${group.videoName}</div>
+                                <div class="event-meta">🎬 ${group.segmentCount} motion segment${group.segmentCount > 1 ? 's' : ''}</div>
+                                <div class="event-meta">⏱️ Total: ${group.totalDuration.toFixed(1)}s</div>
+                                ${objectsList.length > 0 ? `
+                                    <div class="tags">
+                                        ${objectsList.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </a>
+                        <div style="padding: 10px; border-top: 1px solid #30363d; display: flex; gap: 10px; font-size: 11px; color: #8b949e;">
+                            <a href="/api/video?path=${encodeURIComponent(group.videoPath)}&download=true" 
+                               style="color: #58a6ff; text-decoration: none;"
+                               download="${group.videoName}">⬇️ Download</a>
+                            <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
+                                  title="${group.videoPath}">💾 ${group.videoPath}</span>
                         </div>
-                        <div class="event-info">
-                            <div class="event-time">📅 ${displayTime}</div>
-                            <div class="event-meta">📁 ${group.videoName}</div>
-                            <div class="event-meta">🎬 ${group.segmentCount} motion segment${group.segmentCount > 1 ? 's' : ''}</div>
-                            <div class="event-meta">⏱️ Total: ${group.totalDuration.toFixed(1)}s</div>
-                            ${objectsList.length > 0 ? `
-                                <div class="tags">
-                                    ${objectsList.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}
-                                </div>
-                            ` : ''}
-                        </div>
-                    </a>
+                    </div>
                 `;
             }).join('');
         }
@@ -751,6 +760,7 @@ def api_events():
 def api_video():
     """Serve the original video file for download or playback."""
     video_path = request.args.get('path')
+    download = request.args.get('download', 'false').lower() == 'true'
     
     if not video_path:
         return "Missing path", 400
@@ -769,7 +779,7 @@ def api_video():
     except Exception:
         return "Invalid path", 400
     
-    return send_file(str(full_path), mimetype='video/mp4', as_attachment=False)
+    return send_file(str(full_path), mimetype='video/mp4', as_attachment=download)
 
 
 @app.route('/api/preview')
