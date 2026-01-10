@@ -271,6 +271,7 @@ def index():
 
     <div class="controls">
         <button class="btn" onclick="rebuild()">🔄 Rebuild Index</button>
+        <button class="btn" onclick="validateRareObjects()">✓ Validate Rare Objects</button>
         <button class="btn" onclick="refreshEvents()">↻ Refresh</button>
         <label style="margin-left: 15px; color: #c9d1d9;">
             <input type="checkbox" id="onlyWithObjects" onchange="filterEvents()" style="margin-right: 5px;">
@@ -645,6 +646,44 @@ def index():
             }, 2000);
         }
 
+        async function validateRareObjects() {
+            if (rebuilding) return;
+            
+            const confirmed = confirm(
+                'This will re-scan videos with rare objects (bear, bed, horse, etc.) using YOLOv8x for accuracy validation.\n\n' +
+                'This process is slow but ensures quality detections.\n\nContinue?'
+            );
+            
+            if (!confirmed) return;
+            
+            rebuilding = true;
+            document.getElementById('rebuild-status').innerHTML = 
+                '<span class="status">Validating rare objects...</span>';
+            
+            await fetch('/api/validate', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'yolov8x.pt',
+                    objects: ['bear', 'bed', 'horse', 'backpack', 'skateboard', 'train', 'elephant', 'giraffe', 'zebra', 'umbrella']
+                })
+            });
+            
+            // Poll for completion
+            const interval = setInterval(async () => {
+                const res = await fetch('/api/rebuild/status');
+                const status = await res.json();
+                
+                if (!status.running) {
+                    clearInterval(interval);
+                    rebuilding = false;
+                    document.getElementById('rebuild-status').innerHTML = '';
+                    await loadStats();
+                    await loadEvents();
+                }
+            }, 2000);
+        }
+
         async function refreshEvents() {
             await loadStats();
             await loadEvents();
@@ -744,6 +783,49 @@ def api_rebuild():
 def api_rebuild_status():
     """Get rebuild status."""
     return jsonify(rebuild_status)
+
+
+@app.route('/api/validate', methods=['POST'])
+def api_validate():
+    """Trigger validation scan on videos with rare objects."""
+    global rebuild_status
+    
+    if rebuild_status['running']:
+        return jsonify({'error': 'Scan already in progress'}), 400
+    
+    # Get parameters from request
+    data = request.json or {}
+    validation_model = data.get('model', 'yolov8x.pt')
+    rare_objects = data.get('objects', [
+        'bear', 'bed', 'horse', 'backpack', 'skateboard',
+        'train', 'elephant', 'giraffe', 'zebra', 'umbrella'
+    ])
+    
+    rebuild_status = {'running': True, 'message': 'Starting validation scan...', 'progress': 0}
+    
+    def run_validation():
+        def update_progress(progress):
+            rebuild_status['total'] = progress['total']
+            rebuild_status['processed'] = progress['processed']
+            rebuild_status['current_file'] = progress['current_file']
+            rebuild_status['message'] = f"Validating {progress['processed']}/{progress['total']}: {progress['current_file']}"
+        
+        try:
+            logger.info(f"Validation scan triggered (model: {validation_model}, objects: {rare_objects})")
+            processor = MotionProcessor(SURVEILLANCE_ROOT, DB_PATH, DETECTION_CONFIG, progress_callback=update_progress)
+            processor.run_validation_scan(validation_model=validation_model, rare_objects=rare_objects)
+            rebuild_status['running'] = False
+            rebuild_status['message'] = 'Validation complete'
+            logger.info("Validation scan completed")
+        except Exception as e:
+            logger.error(f"Validation failed: {e}")
+            rebuild_status['running'] = False
+            rebuild_status['message'] = f'Error: {e}'
+    
+    thread = threading.Thread(target=run_validation, daemon=True)
+    thread.start()
+    
+    return jsonify({'status': 'started', 'model': validation_model, 'objects': rare_objects})
 
 
 def auto_scan_loop():

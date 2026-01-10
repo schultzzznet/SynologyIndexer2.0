@@ -38,6 +38,8 @@ class DatabaseManager:
                             processed_at TEXT,
                             processing_duration_sec REAL,
                             has_motion BOOLEAN NOT NULL DEFAULT 0,
+                            validated_at TEXT,
+                            validated_model TEXT,
                             error_message TEXT
                         )
                     """)
@@ -64,6 +66,7 @@ class DatabaseManager:
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_path ON videos(video_path)")
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_processed ON videos(processed_at)")
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_has_motion ON videos(has_motion)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_validated ON videos(validated_at)")
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_video ON motion_segments(video_hash)")
                     conn.execute("CREATE INDEX IF NOT EXISTS idx_segments_created ON motion_segments(created_at)")
                     
@@ -220,4 +223,39 @@ class DatabaseManager:
             result = cursor.fetchone()[0]
             stats['avg_processing_time'] = round(result, 2) if result else 0
             
-            return stats
+            return stats    
+    def get_videos_for_validation(self, rare_objects: List[str]) -> List[Dict]:
+        """Get videos that contain rare objects and need validation with better model."""
+        with self.transaction() as conn:
+            # Build query to find videos with any of the rare objects
+            object_conditions = " OR ".join(
+                ["m.detected_objects LIKE ?"] * len(rare_objects)
+            )
+            params = [f"%{obj}%" for obj in rare_objects]
+            
+            cursor = conn.execute(f"""
+                SELECT DISTINCT
+                    v.video_hash,
+                    v.video_path,
+                    v.file_size,
+                    v.last_modified,
+                    v.validated_at,
+                    v.validated_model,
+                    GROUP_CONCAT(DISTINCT m.detected_objects) as all_objects
+                FROM videos v
+                JOIN motion_segments m ON v.video_hash = m.video_hash
+                WHERE v.processed_at IS NOT NULL
+                  AND ({object_conditions})
+                GROUP BY v.video_hash
+                ORDER BY v.processed_at DESC
+            """, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def mark_validated(self, video_hash: str, model_name: str):
+        """Mark a video as validated with a specific model."""
+        with self.transaction() as conn:
+            conn.execute("""
+                UPDATE videos
+                SET validated_at = ?, validated_model = ?
+                WHERE video_hash = ?
+            """, (datetime.utcnow().isoformat(), model_name, video_hash))

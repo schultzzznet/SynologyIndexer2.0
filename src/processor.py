@@ -158,6 +158,112 @@ class MotionProcessor:
             )
         else:
             self.logger.info(f"{video.path.name}: No motion detected")
+    
+    def run_validation_scan(self, validation_model: str = "yolov8x.pt", 
+                           rare_objects: list = None):
+        """
+        Run validation scan on videos with rare/unusual objects.
+        Re-processes them with a more accurate model for sanity checking.
+        
+        Args:
+            validation_model: Higher accuracy model (yolov8x.pt, yolov8l.pt, etc.)
+            rare_objects: List of object names to validate (bear, bed, horse, etc.)
+        """
+        if rare_objects is None:
+            # Default rare objects that need validation
+            rare_objects = [
+                'bear', 'bed', 'horse', 'backpack', 'skateboard', 
+                'train', 'elephant', 'giraffe', 'zebra', 'umbrella'
+            ]
+        
+        self.logger.info("="*70)
+        self.logger.info("Starting Validation Scan")
+        self.logger.info(f"Validation model: {validation_model}")
+        self.logger.info(f"Rare objects to validate: {', '.join(rare_objects)}")
+        self.logger.info("="*70)
+        
+        # Get videos needing validation
+        videos_to_validate = self.db.get_videos_for_validation(rare_objects)
+        
+        if not videos_to_validate:
+            self.logger.info("No videos with rare objects found to validate")
+            return
+        
+        self.logger.info(f"Found {len(videos_to_validate)} videos to validate")
+        
+        # Create validation config with better model
+        validation_config = self.config.copy()
+        validation_config['yolo_model'] = validation_model
+        validation_config['parallel_workers'] = 1  # Slow model, sequential is better
+        
+        # Process each video with validation model
+        validated_count = 0
+        for video_info in videos_to_validate:
+            video_path = Path(video_info['video_path'])
+            
+            if not video_path.exists():
+                self.logger.warning(f"Video not found, skipping: {video_path}")
+                continue
+            
+            try:
+                # Create VideoFile object
+                from scanner import VideoFile
+                import hashlib
+                video = VideoFile(
+                    path=video_path,
+                    size=video_info['file_size'],
+                    modified=video_info['last_modified'],
+                    hash=video_info['video_hash']
+                )
+                
+                # Re-analyze with validation model
+                detector = MotionDetector(validation_config)
+                segments, metadata = detector.analyze_video(video_path)
+                
+                # Clear old segments for this video
+                with self.db.transaction() as conn:
+                    conn.execute(
+                        "DELETE FROM motion_segments WHERE video_hash = ?",
+                        (video.hash,)
+                    )
+                
+                # Save new segments
+                for idx, segment in enumerate(segments, 1):
+                    self.db.add_motion_segment(
+                        video.hash, idx,
+                        format_time(segment.start_time),
+                        format_time(segment.end_time),
+                        segment.end_time - segment.start_time,
+                        segment.max_motion_area,
+                        segment.detected_objects,
+                        len(segment.preview_frames)
+                    )
+                
+                # Mark as validated
+                self.db.mark_validated(video.hash, validation_model)
+                validated_count += 1
+                
+                self.logger.info(
+                    f"✓ Validated {video_path.name}: {len(segments)} segment(s) "
+                    f"(was: {video_info.get('all_objects', 'unknown')})"
+                )
+                
+                # Report progress
+                if self.progress_callback:
+                    self.progress_callback({
+                        'total': len(videos_to_validate),
+                        'processed': validated_count,
+                        'current_file': f"Validating: {video_path.name}",
+                        'has_motion': len(segments) > 0,
+                        'segments': len(segments)
+                    })
+                
+            except Exception as e:
+                self.logger.error(f"Validation failed for {video_path.name}: {e}")
+        
+        self.logger.info("="*70)
+        self.logger.info(f"Validation Complete: {validated_count}/{len(videos_to_validate)} videos")
+        self.logger.info("="*70)
 
 
 def init_worker(config: Dict):
