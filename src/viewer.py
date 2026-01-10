@@ -21,6 +21,7 @@ DB_PATH = DATA_DIR / 'motion_events.db'
 LOG_DIR = DATA_DIR / 'logs'
 AUTOSCAN_INTERVAL = int(os.environ.get('AUTOSCAN_INTERVAL', '60'))
 WORKERS = int(os.environ.get('WORKERS', '2'))
+YOLO_MODEL = os.environ.get('YOLO_MODEL', 'yolov8m.pt')
 
 # Detection config
 DETECTION_CONFIG = {
@@ -33,6 +34,7 @@ DETECTION_CONFIG = {
     "end_grace_frames": 6,
     "min_segment_duration": 0.5,
     "enable_yolo": True,
+    "yolo_model": YOLO_MODEL,
     "preview_dir": str(DATA_DIR / "previews")
 }
 
