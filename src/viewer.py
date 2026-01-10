@@ -176,6 +176,10 @@ def index():
             border-radius: 8px;
             overflow: hidden;
             transition: transform 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
         }
         .event-card:hover {
             transform: translateY(-4px);
@@ -610,7 +614,7 @@ def index():
                 }
                 
                 return `
-                    <div class="event-card">
+                    <a href="/api/video?path=${encodeURIComponent(group.videoPath)}" class="event-card" target="_blank">
                         <div class="preview-grid">
                             ${group.segments.map(seg => `
                                 <img class="event-preview" 
@@ -630,7 +634,7 @@ def index():
                                 </div>
                             ` : ''}
                         </div>
-                    </div>
+                    </a>
                 `;
             }).join('');
         }
@@ -741,6 +745,31 @@ def api_events():
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
+
+@app.route('/api/video')
+def api_video():
+    """Serve the original video file for download or playback."""
+    video_path = request.args.get('path')
+    
+    if not video_path:
+        return "Missing path", 400
+    
+    # Security: ensure path is within surveillance root
+    full_path = Path(video_path)
+    if not full_path.exists():
+        return "Video not found", 404
+    
+    try:
+        # Resolve to check it's within surveillance root
+        resolved = full_path.resolve()
+        surveillance_resolved = SURVEILLANCE_ROOT.resolve()
+        if not str(resolved).startswith(str(surveillance_resolved)):
+            return "Access denied", 403
+    except Exception:
+        return "Invalid path", 400
+    
+    return send_file(str(full_path), mimetype='video/mp4', as_attachment=False)
 
 
 @app.route('/api/preview')
