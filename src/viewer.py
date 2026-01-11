@@ -923,6 +923,9 @@ def api_rebuild():
             processor.run_scan()
             rebuild_status['running'] = False
             rebuild_status['message'] = 'Rebuild complete'
+            rebuild_status['total'] = 0
+            rebuild_status['processed'] = 0
+            rebuild_status['current_file'] = ''
             logger.info("Manual rebuild completed")
         except Exception as e:
             logger.error(f"Rebuild failed: {e}")
@@ -972,6 +975,9 @@ def api_validate():
             processor.run_validation_scan(validation_model=validation_model, rare_objects=rare_objects)
             rebuild_status['running'] = False
             rebuild_status['message'] = 'Validation complete'
+            rebuild_status['total'] = 0
+            rebuild_status['processed'] = 0
+            rebuild_status['current_file'] = ''
             logger.info("Validation scan completed")
         except Exception as e:
             logger.error(f"Validation failed: {e}")
@@ -1040,6 +1046,9 @@ def auto_scan_loop():
             
             rebuild_status['running'] = False
             rebuild_status['message'] = ''
+            rebuild_status['total'] = 0
+            rebuild_status['processed'] = 0
+            rebuild_status['current_file'] = ''
             logger.info("Auto-scan completed")
         except Exception as e:
             logger.error(f"Auto-scan failed: {e}")
