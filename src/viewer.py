@@ -958,14 +958,30 @@ def api_clear_recent():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/video', methods=['GET'])
-            rebuild_status['running'] = False
-            rebuild_status['message'] = f'Error: {e}'
+@app.route('/api/video')
+def api_video():
+    """Serve the original video file for download or playback."""
+    video_path = request.args.get('path')
+    download = request.args.get('download', 'false').lower() == 'true'
     
-    thread = threading.Thread(target=run_validation, daemon=True)
-    thread.start()
+    if not video_path:
+        return "Missing path", 400
     
-    return jsonify({'status': 'started', 'model': validation_model, 'objects': rare_objects})
+    # Security: ensure path is within surveillance root
+    full_path = Path(video_path)
+    if not full_path.exists():
+        return "Video not found", 404
+    
+    try:
+        # Resolve to check it's within surveillance root
+        resolved = full_path.resolve()
+        surveillance_resolved = SURVEILLANCE_ROOT.resolve()
+        if not str(resolved).startswith(str(surveillance_resolved)):
+            return "Access denied", 403
+    except Exception:
+        return "Invalid path", 400
+    
+    return send_file(str(full_path), mimetype='video/mp4', as_attachment=download)
 
 
 def auto_scan_loop():
