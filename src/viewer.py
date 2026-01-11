@@ -72,6 +72,15 @@ def index():
 <head>
     <title>Motion Detection Viewer 2.0</title>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="description" content="Motion detection system with intelligent object recognition">
+    <meta name="theme-color" content="#1f6feb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Motion Viewer">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="apple-touch-icon" href="/icon-192.png">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -289,11 +298,51 @@ def index():
             background: white;
             transition: width 0.3s;
         }
+        .install-prompt {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f6feb;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(31, 111, 235, 0.4);
+            display: none;
+            align-items: center;
+            gap: 15px;
+            z-index: 1001;
+            max-width: 90%;
+        }
+        .install-prompt button {
+            background: white;
+            color: #1f6feb;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .install-prompt button:hover {
+            background: #e6e6e6;
+        }
+        @media (max-width: 768px) {
+            .header h1 { font-size: 24px; }
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .controls { flex-direction: column; }
+            .btn { width: 100%; }
+        }
     </style>
 </head>
 <body>
     <div id="processing-status" class="processing-status" style="display:none;">
         <strong>⚙️ Processing:</strong> <span id="status-message">Scanning...</span>
+    </div>
+    
+    <div id="install-prompt" class="install-prompt">
+        <span>📱 Install Motion Viewer as an app</span>
+        <button onclick="installPWA()">Install</button>
+        <button onclick="dismissInstallPrompt()" style="background: transparent; color: white;">Dismiss</button>
     </div>
     
     <div class="header">
@@ -825,6 +874,65 @@ def index():
         loadEvents();
         checkProcessingStatus();
         console.log('Initial load triggered');
+        
+        // PWA installation support
+        let deferredPrompt;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the mini-infobar from appearing on mobile
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            // Show our custom install prompt
+            const installPrompt = document.getElementById('install-prompt');
+            if (installPrompt) {
+                installPrompt.style.display = 'flex';
+            }
+        });
+        
+        function installPWA() {
+            const installPrompt = document.getElementById('install-prompt');
+            if (installPrompt) {
+                installPrompt.style.display = 'none';
+            }
+            
+            if (deferredPrompt) {
+                // Show the install prompt
+                deferredPrompt.prompt();
+                // Wait for the user to respond to the prompt
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+        
+        function dismissInstallPrompt() {
+            const installPrompt = document.getElementById('install-prompt');
+            if (installPrompt) {
+                installPrompt.style.display = 'none';
+            }
+            // Store dismissal in localStorage so we don't show it again
+            localStorage.setItem('installPromptDismissed', 'true');
+        }
+        
+        // Check if user previously dismissed the prompt
+        if (localStorage.getItem('installPromptDismissed') === 'true') {
+            const installPrompt = document.getElementById('install-prompt');
+            if (installPrompt) {
+                installPrompt.style.display = 'none';
+            }
+        }
+        
+        // Log installation success
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA installed successfully');
+            localStorage.setItem('installPromptDismissed', 'true');
+        });
     </script>
 </body>
 </html>
@@ -851,6 +959,79 @@ def api_events():
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
+
+@app.route('/manifest.json')
+def manifest():
+    """Serve PWA manifest."""
+    return jsonify({
+        "name": "Motion Detection Viewer 2.0",
+        "short_name": "Motion Viewer",
+        "description": "Motion detection system with intelligent object recognition",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0d1117",
+        "theme_color": "#1f6feb",
+        "orientation": "portrait-primary",
+        "icons": [
+            {
+                "src": "/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable"
+            },
+            {
+                "src": "/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable"
+            },
+            {
+                "src": "/icon.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+                "purpose": "any"
+            }
+        ],
+        "categories": ["utilities", "productivity"],
+        "screenshots": []
+    })
+
+
+@app.route('/icon.svg')
+def icon_svg():
+    """Serve app icon as SVG."""
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <defs>
+            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#1f6feb;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#0969da;stop-opacity:1" />
+            </linearGradient>
+        </defs>
+        <rect width="100" height="100" rx="20" fill="url(#grad)"/>
+        <circle cx="50" cy="35" r="15" fill="white" opacity="0.9"/>
+        <path d="M 35 50 L 50 35 L 65 50 L 50 65 Z" fill="white" opacity="0.8"/>
+        <circle cx="30" cy="70" r="4" fill="white" opacity="0.6"/>
+        <circle cx="50" cy="75" r="3" fill="white" opacity="0.6"/>
+        <circle cx="70" cy="70" r="4" fill="white" opacity="0.6"/>
+        <text x="50" y="92" font-family="Arial, sans-serif" font-size="12" font-weight="bold" 
+              fill="white" text-anchor="middle" opacity="0.9">MOTION</text>
+    </svg>'''
+    return svg, 200, {'Content-Type': 'image/svg+xml'}
+
+
+@app.route('/icon-192.png')
+def icon_192():
+    """Serve 192x192 PNG icon (placeholder - generates from SVG)."""
+    # For now, redirect to SVG. In production, you'd generate actual PNG.
+    return icon_svg()
+
+
+@app.route('/icon-512.png')
+def icon_512():
+    """Serve 512x512 PNG icon (placeholder - generates from SVG)."""
+    # For now, redirect to SVG. In production, you'd generate actual PNG.
+    return icon_svg()
 
 
 @app.route('/api/video')
