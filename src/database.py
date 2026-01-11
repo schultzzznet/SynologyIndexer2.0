@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class DatabaseManager:
@@ -290,3 +290,53 @@ class DatabaseManager:
                 SET validated_at = ?, validated_model = ?
                 WHERE video_hash = ?
             """, (datetime.utcnow().isoformat(), model_name, video_hash))
+    
+    def clear_recent_results(self, hours: int = 24) -> Dict[str, int]:
+        """Clear processing results for videos processed in the last N hours."""
+        with self.transaction() as conn:
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            cutoff_iso = cutoff_time.isoformat()
+            
+            # Count affected videos and segments first
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM videos WHERE processed_at >= ?",
+                (cutoff_iso,)
+            )
+            video_count = cursor.fetchone()[0]
+            
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM motion_segments 
+                WHERE video_hash IN (
+                    SELECT video_hash FROM videos WHERE processed_at >= ?
+                )
+            """, (cutoff_iso,))
+            segment_count = cursor.fetchone()[0]
+            
+            # Delete segments for these videos (CASCADE will handle this, but being explicit)
+            conn.execute("""
+                DELETE FROM motion_segments 
+                WHERE video_hash IN (
+                    SELECT video_hash FROM videos WHERE processed_at >= ?
+                )
+            """, (cutoff_iso,))
+            
+            # Reset processing state (keep video records but mark as unprocessed)
+            conn.execute("""
+                UPDATE videos 
+                SET processed_at = NULL,
+                    processing_duration_sec = NULL,
+                    has_motion = 0,
+                    brightness_level = NULL,
+                    preprocessing_applied = NULL,
+                    validated_at = NULL,
+                    validated_model = NULL,
+                    error_message = NULL
+                WHERE processed_at >= ?
+            """, (cutoff_iso,))
+            
+            self.logger.info(f"Cleared {video_count} videos and {segment_count} segments from last {hours} hours")
+            return {
+                "videos_cleared": video_count,
+                "segments_deleted": segment_count,
+                "cutoff_time": cutoff_iso
+            }

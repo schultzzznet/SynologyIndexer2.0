@@ -278,6 +278,7 @@ def index():
     <div class="controls">
         <button class="btn" onclick="rebuild()">🔄 Rebuild Index</button>
         <button class="btn" onclick="validateRareObjects()">✓ Validate Rare Objects</button>
+        <button class="btn" onclick="clearRecent()">🗑️ Clear Last 24h</button>
         <button class="btn" onclick="refreshEvents()">↻ Refresh</button>
         <label style="margin-left: 15px; color: #c9d1d9;">
             <input type="checkbox" id="onlyWithObjects" onchange="filterEvents()" style="margin-right: 5px;">
@@ -710,6 +711,47 @@ def index():
             }, 2000);
         }
 
+        async function clearRecent() {
+            if (rebuilding) return;
+            
+            const hours = prompt('Clear results from the last N hours (1-168):', '24');
+            if (!hours) return;
+            
+            const hoursNum = parseInt(hours);
+            if (isNaN(hoursNum) || hoursNum <= 0 || hoursNum > 168) {
+                alert('Please enter a valid number between 1 and 168');
+                return;
+            }
+            
+            const confirmed = confirm(
+                `This will clear all processing results for videos from the last ${hoursNum} hours.\\n\\n` +
+                'These videos will be re-scanned during the next auto-scan with the current detection settings.\\n\\nContinue?'
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                const res = await fetch('/api/clear-recent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hours: hoursNum })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert(`Cleared ${data.videos_cleared} videos and ${data.segments_deleted} segments.\\nThey will be re-scanned on next auto-scan.`);
+                    await loadStats();
+                    await loadEvents();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Failed to clear recent results:', e);
+                alert('Failed to clear results: ' + e.message);
+            }
+        }
+
         async function refreshEvents() {
             await loadStats();
             await loadEvents();
@@ -878,6 +920,45 @@ def api_validate():
             logger.info("Validation scan completed")
         except Exception as e:
             logger.error(f"Validation failed: {e}")
+            rebuild_status['running'] = False
+            rebuild_status['message'] = f'Validation failed: {str(e)}'
+    
+    thread = threading.Thread(target=run_validation)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'message': 'Validation scan started', 'model': validation_model})
+
+
+@app.route('/api/clear-recent', methods=['POST'])
+def api_clear_recent():
+    """Clear processing results for videos from the last N hours."""
+    try:
+        data = request.json or {}
+        hours = data.get('hours', 24)
+        
+        # Validate hours parameter
+        if not isinstance(hours, (int, float)) or hours <= 0 or hours > 168:  # Max 1 week
+            return jsonify({'error': 'Hours must be between 0 and 168'}), 400
+        
+        db = DatabaseManager(DB_PATH)
+        result = db.clear_recent_results(hours=int(hours))
+        
+        logger.info(f"Cleared results for last {hours} hours: {result['videos_cleared']} videos, {result['segments_deleted']} segments")
+        
+        return jsonify({
+            'success': True,
+            'message': f"Cleared {result['videos_cleared']} videos from last {hours} hours",
+            'videos_cleared': result['videos_cleared'],
+            'segments_deleted': result['segments_deleted'],
+            'cutoff_time': result['cutoff_time']
+        })
+    except Exception as e:
+        logger.error(f"Failed to clear recent results: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/video', methods=['GET'])
             rebuild_status['running'] = False
             rebuild_status['message'] = f'Error: {e}'
     
