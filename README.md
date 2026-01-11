@@ -1,8 +1,8 @@
 # SynologyIndexer 2.0 🎥
 
-**Next-generation motion detection system with SQLite backend, real-time processing, and intelligent object detection**
+**Next-generation motion detection system with SQLite backend, real-time processing, intelligent object detection, and low-light enhancement**
 
-Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, crash-safe operations, and YOLOv8m-powered object recognition.
+Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, crash-safe operations, YOLOv8-powered object recognition, and adaptive CLAHE enhancement for nighttime footage.
 
 ## Architecture
 
@@ -16,9 +16,12 @@ Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, cr
 **Key improvements over 1.0:**
 - ✅ SQLite with WAL mode (crash-safe, indexed, queryable, concurrent reads)
 - ✅ YOLOv8m object detection (50.2 mAP - person, car, dog, cat, etc.)
+- ✅ **CLAHE low-light enhancement** (adaptive histogram equalization for dark videos)
+- ✅ **Adaptive confidence thresholds** (0.15 for low-light vs 0.25 for normal lighting)
+- ✅ **Brightness tracking & metadata** (per-video brightness levels and preprocessing info)
 - ✅ Real-time progress tracking (live status banner in UI)
 - ✅ Optimized parallel processing (YOLO loaded once per worker)
-- ✅ Tile-based UI (grouped segments by video with preview thumbnails)
+- ✅ Tile-based UI with scan details (brightness, enhancement, processing time)
 - ✅ Docker volumes for persistence (database survives container restarts)
 - ✅ imap_unordered for streaming updates (no batch delays)
 - ✅ Atomic transactions (no data loss on crash)
@@ -28,15 +31,29 @@ Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, cr
 
 ### Motion Detection
 - **OpenCV MOG2** background subtraction with adaptive thresholds
-- Brightness-aware detection (dark videos get lower thresholds)
+- **Brightness detection** - Samples 5 frames to calculate mean grayscale value
+- **CLAHE enhancement** - Applied to dark videos (brightness < 60) using LAB color space
+- **Adaptive confidence** - 0.15 threshold for low-light vs 0.25 for normal lighting
 - Contour analysis for motion area calculation
 - Segment merging (combines nearby motion events)
+
+### Low-Light Enhancement
+- **Automatic brightness detection**: Samples 5 frames from video, calculates mean brightness (0-255)
+- **CLAHE preprocessing**: Applied when brightness < 60
+  - Converts frame to LAB color space
+  - Applies Contrast Limited Adaptive Histogram Equalization to L channel
+  - Preserves color information while enhancing contrast
+- **Adaptive confidence thresholds**:
+  - Dark videos (< 60 brightness): 0.15 confidence threshold
+  - Normal videos (≥ 60 brightness): 0.25 confidence threshold
+- **Metadata tracking**: Brightness level and preprocessing method stored per video
 
 ### Object Recognition
 - **YOLOv8m** (medium model) - 25MB, 50.2 mAP on COCO dataset
 - Detects: person, car, dog, cat, bird, truck, bicycle, motorcycle, and 72 other classes
 - Optimized loading: YOLO loaded once per worker (not per video)
-- Per-segment object detection with confidence scores
+- Per-segment object detection with adaptive confidence scores
+- Context-aware detection (lower thresholds for challenging lighting)
 
 ### Real-Time Progress Tracking
 - Live status banner in UI (updates every 5 seconds)
@@ -46,9 +63,15 @@ Clean rewrite of SynologyIndexer with proper architecture, ACID transactions, cr
 
 ### Web UI
 - **Tile-based layout**: Groups motion segments by video file
+- **Scan details badges**: 
+  - 🌙/☀️ Brightness level (dark vs normal lighting)
+  - ✨ Enhancement indicator (CLAHE applied)
+  - ⚙️ Processing time per video
 - **Preview thumbnails**: Multiple preview images per event in grid layout
+- **Multi-select object filtering**: Click multiple object types to filter
 - **Auto-refresh**: Statistics update every 30 seconds
-- **Filtering/Sorting**: By date, camera, motion intensity
+- **Filtering/Sorting**: By date, duration, segment count, camera name
+- **Clear recent results**: Delete and re-scan last N hours (for testing)
 - **Responsive design**: Works on desktop and mobile
 
 ### Preview Images
@@ -142,6 +165,9 @@ Adjust in docker-compose.yml based on your hardware.
 - `video_path` - Full path to video file
 - `processed_at` - Timestamp of processing
 - `has_motion` - Boolean flag
+- `brightness_level` - Mean brightness (0-255 scale)
+- `preprocessing_applied` - Enhancement method (e.g., "CLAHE")
+- `processing_duration_sec` - Time taken to process video
 - `error_message` - If processing failed
 
 **motion_segments table:**
@@ -164,6 +190,8 @@ Adjust in docker-compose.yml based on your hardware.
 - `GET /api/preview?path=...&segment=N` - Preview image for segment
 - `POST /api/rebuild` - Trigger manual scan
 - `GET /api/rebuild/status` - Live rebuild status (progress tracking)
+- `POST /api/validate` - Re-scan videos with rare objects using YOLOv8x
+- `POST /api/clear-recent` - Clear results for last N hours (for re-testing)
 
 ## Technology Stack
 
@@ -304,6 +332,136 @@ ssh theinfracore 'curl -s http://localhost:5050/api/statistics | python3 -m json
 # Live rebuild status
 ssh theinfracore 'curl -s http://localhost:5050/api/rebuild/status | python3 -m json.tool'
 ```
+
+## Recent Updates (Jan 2026)
+
+**v2.2 - Low-Light Enhancement & Scan Metadata (Jan 11, 2026)**
+- ✅ **CLAHE preprocessing** for dark videos (brightness < 60)
+  - LAB color space enhancement preserves color while improving contrast
+  - Applied in-memory before YOLO detection (no video file modification)
+- ✅ **Adaptive confidence thresholds** (0.15 for dark vs 0.25 for normal)
+- ✅ **Brightness tracking** - Samples 5 frames, stores mean brightness per video
+- ✅ **Scan details UI** - Shows brightness level, enhancement status, processing time
+- ✅ **Clear recent results** - Delete and re-scan last N hours via UI button
+- ✅ **AB testing deployment** - NAS 212 with enhancements, 213 as baseline
+
+**v2.1 - Real-Time Processing & YOLOv8m**
+- ✅ Upgraded to YOLOv8m (50.2 mAP, up from 37.3 with nano)
+- ✅ Real-time progress tracking in UI (5-second polling)
+- ✅ Optimized YOLO loading (once per worker vs per video)
+- ✅ Fixed preview image naming to match database indices
+- ✅ Streaming results with imap_unordered (no batch delays)
+- ✅ Tile-based UI grouping segments by video
+- ✅ Green pulsing status banner with detailed progress
+
+## How It Works
+
+### Detection Pipeline
+
+1. **Video Discovery**
+   - Scans NAS mounts for video files
+   - Calculates content-based hashes (MD5)
+   - Skips already-processed videos
+
+2. **Brightness Analysis**
+   - Samples 5 frames evenly distributed through video
+   - Converts to grayscale and calculates mean pixel value (0-255)
+   - Determines if video is "dark" (< 60) or "normal" (≥ 60)
+
+3. **Motion Detection**
+   - OpenCV MOG2 background subtraction
+   - Samples every Nth frame (configurable, default 2)
+   - Identifies contours above minimum area threshold
+   - Groups nearby motion into segments
+
+4. **Low-Light Enhancement** (if brightness < 60)
+   - Converts frame from BGR to LAB color space
+   - Applies CLAHE to L (lightness) channel only
+   - Converts back to BGR for YOLO input
+   - Preserves color information while improving contrast
+
+5. **Object Detection**
+   - YOLOv8m inference on motion frames
+   - Adaptive confidence: 0.15 for dark videos, 0.25 for normal
+   - Detects 80 COCO classes (person, car, dog, etc.)
+   - Stores detected objects per segment
+
+6. **Preview Generation**
+   - Saves up to 5 representative frames per segment
+   - Stored as JPEG in Docker volume
+   - Named: `{video}_seg{NNN}_f{frame}.jpg`
+
+7. **Database Storage**
+   - Atomic transaction with video metadata + segments
+   - Stores brightness level and preprocessing method
+   - Tracks processing duration for performance monitoring
+
+### Why CLAHE on LAB Color Space?
+
+- **CLAHE** (Contrast Limited Adaptive Histogram Equalization) prevents over-amplification
+- **LAB color space** separates luminance (L) from color (A, B):
+  - Enhancing only L channel improves visibility without color distortion
+  - Preserves natural color appearance of objects
+  - Better for YOLO detection than RGB-based enhancement
+
+### Understanding YOLO
+
+YOLO (You Only Look Once) is a single-pass neural network for object detection:
+- **Not "AI that understands"** - it's pattern recognition trained on millions of labeled images
+- **Grid-based prediction** - Divides image into grid, predicts bounding boxes + class probabilities
+- **COCO dataset** - Pre-trained on 80 common object classes
+- **Confidence scores** - Higher = more certain, but context-dependent (night footage needs lower thresholds)
+
+Read more: [How YOLO Actually Works](https://chatgpt.com/share/69635dbf-1ef8-8007-81ec-064ea452993e)
+
+## Future Enhancements
+
+See [GitHub Issues](https://github.com/schultzzznet/SynologyIndexer2.0/issues) for detailed proposals:
+
+### 🎯 High Priority
+
+**[#3 - Object Tracking](https://github.com/schultzzznet/SynologyIndexer2.0/issues/3)**
+- Track objects across multiple segments (ByteTrack/BoT-SORT)
+- "Person was present for 5 minutes" analytics
+- Reduce duplicate detection alerts
+- Path/trajectory visualization
+
+**[#4 - Zone-Based Detection](https://github.com/schultzzznet/SynologyIndexer2.0/issues/4)**
+- Define areas of interest (driveway, door, property boundary)
+- Ignore specific zones (street traffic, swaying trees)
+- Per-zone confidence thresholds and object filters
+- Drastically reduce false positives
+
+### 🔬 Research / Long-Term
+
+**[#2 - Night-Vision Specific Model](https://github.com/schultzzznet/SynologyIndexer2.0/issues/2)**
+- Fine-tune YOLO on IR/thermal footage datasets
+- Handle IR illuminator patterns and artifacts
+- Better than CLAHE + base model for complete darkness
+- Switch models based on brightness: `if brightness < 60: use night_model`
+
+**[#1 - Custom Training](https://github.com/schultzzznet/SynologyIndexer2.0/issues/1)**
+- Train on your specific camera footage
+- Custom classes: "delivery_package", "my_dog", "open_door"
+- Optimized for your camera angles and lighting
+- Use existing motion segments as training data
+
+### 💡 Other Ideas
+
+- **Smart notifications**: Push alerts for specific objects in specific zones
+- **Time-based patterns**: "Unusual activity" detection (movement at 3 AM)
+- **Integration**: Home Assistant, Frigate NVR compatibility
+- **Multi-model inference**: Fast model for initial scan, accurate model for validation
+- **Hardware acceleration**: Coral TPU or GPU support for faster inference
+
+## AB Testing Methodology
+
+Current deployment strategy for testing enhancements:
+
+- **NAS 212** - Production with enhancements (CLAHE, adaptive confidence, metadata)
+- **NAS 213** - Baseline without enhancements (control group)
+
+This allows direct comparison of detection quality, false positive rates, and processing performance before deploying to all systems.
 
 ## Recent Updates (Jan 2026)
 
