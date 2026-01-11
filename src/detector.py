@@ -38,6 +38,9 @@ class MotionDetector:
         self.preview_dir = Path(config.get("preview_dir", "/data/previews"))
         self.preview_dir.mkdir(parents=True, exist_ok=True)
         
+        # CLAHE for low-light enhancement
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        
         if HAS_YOLO and config.get("enable_yolo", True):
             try:
                 model_name = config.get("yolo_model", "yolov8m.pt")
@@ -75,6 +78,7 @@ class MotionDetector:
         
         # Calculate brightness for adaptive thresholds
         brightness = self._calculate_brightness(cap)
+        self._current_brightness = brightness  # Store for use in _detect_objects
         thresholds = self._get_adaptive_thresholds(brightness)
         
         while True:
@@ -166,6 +170,21 @@ class MotionDetector:
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
         return sum(brightness_values) / len(brightness_values) if brightness_values else 80
     
+    def _preprocess_dark_frame(self, frame) -> Tuple:
+        """Apply CLAHE enhancement to dark frames. Returns (enhanced_frame, preprocessing_name)."""
+        # Convert to LAB color space
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to L channel
+        l_enhanced = self.clahe.apply(l)
+        
+        # Merge back and convert to BGR
+        enhanced_lab = cv2.merge([l_enhanced, a, b])
+        enhanced_frame = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+        
+        return enhanced_frame, "CLAHE"
+    
     def _get_adaptive_thresholds(self, brightness: float) -> Dict:
         """Adjust detection thresholds based on brightness."""
         if brightness < 60:  # Dark video
@@ -208,7 +227,9 @@ class MotionDetector:
             cap.set(cv2.CAP_PROP_POS_FRAMES, saved_previews[0])
             ret, frame = cap.read()
             if ret:
-                detected_objects = self._detect_objects(frame)
+                # Get brightness from current video analysis context (passed via analyze_video)
+                brightness = getattr(self, '_current_brightness', 80)
+                detected_objects = self._detect_objects(frame, brightness)
         
         return MotionSegment(
             start_time=segment_data["start_time"],
@@ -218,21 +239,36 @@ class MotionDetector:
             preview_frames=saved_previews
         )
     
-    def _detect_objects(self, frame) -> str:
-        """Detect objects using YOLO."""
+    def _detect_objects(self, frame, brightness: float = 80) -> str:
+        """Detect objects using YOLO with adaptive confidence and preprocessing."""
         if not self.yolo_model:
             return ""
         
         try:
-            results = self.yolo_model(frame, verbose=False)
+            # Apply preprocessing for dark videos
+            preprocessing_applied = None
+            if brightness < 60:  # Dark video threshold
+                frame, preprocessing_applied = self._preprocess_dark_frame(frame)
+            
+            # Adaptive confidence threshold
+            confidence_threshold = 0.15 if brightness < 60 else 0.25
+            
+            results = self.yolo_model(frame, verbose=False, conf=confidence_threshold)
             objects = []
             for r in results:
                 for box in r.boxes:
                     cls = int(box.cls[0])
                     conf = float(box.conf[0])
-                    if conf > 0.5:
-                        objects.append(r.names[cls])
-            return ", ".join(sorted(set(objects))) if objects else ""
+                    # Already filtered by confidence_threshold in YOLO call
+                    objects.append(r.names[cls])
+            
+            detected = ", ".join(sorted(set(objects))) if objects else ""
+            
+            # Log preprocessing if applied
+            if preprocessing_applied and detected:
+                self.logger.debug(f"Dark video detection (brightness={brightness:.1f}, {preprocessing_applied}): {detected}")
+            
+            return detected
         except Exception as e:
             self.logger.warning(f"YOLO detection failed: {e}")
             return ""

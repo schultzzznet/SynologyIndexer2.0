@@ -129,13 +129,17 @@ class MotionProcessor:
             )
             return
         
-        # Mark video as processed
+        # Mark video as processed with brightness metrics
         processing_time = metadata.get("processing_duration", 0)
         has_motion = len(segments) > 0
+        brightness = metadata.get("brightness", None)
+        brightness_factor = metadata.get("brightness_factor", None)
+        preprocessing = "CLAHE" if brightness_factor == "dark" else None
         
         self.db.mark_processed(
             video.hash, str(video.path), video.size, video.modified,
-            processing_duration=processing_time, has_motion=has_motion
+            processing_duration=processing_time, has_motion=has_motion,
+            brightness_level=brightness, preprocessing_applied=preprocessing
         )
         
         # Add motion segments

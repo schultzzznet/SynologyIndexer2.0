@@ -46,6 +46,12 @@ class DatabaseManager:
                         if 'validated_model' not in columns:
                             self.logger.info("Migrating database: adding validated_model column")
                             conn.execute("ALTER TABLE videos ADD COLUMN validated_model TEXT")
+                        if 'brightness_level' not in columns:
+                            self.logger.info("Migrating database: adding brightness_level column")
+                            conn.execute("ALTER TABLE videos ADD COLUMN brightness_level REAL")
+                        if 'preprocessing_applied' not in columns:
+                            self.logger.info("Migrating database: adding preprocessing_applied column")
+                            conn.execute("ALTER TABLE videos ADD COLUMN preprocessing_applied TEXT")
                     
                     # Videos table - tracks all scanned videos and processing state
                     conn.execute("""
@@ -59,6 +65,8 @@ class DatabaseManager:
                             has_motion BOOLEAN NOT NULL DEFAULT 0,
                             validated_at TEXT,
                             validated_model TEXT,
+                            brightness_level REAL,
+                            preprocessing_applied TEXT,
                             error_message TEXT
                         )
                     """)
@@ -146,17 +154,21 @@ class DatabaseManager:
     
     def mark_processed(self, video_hash: str, video_path: str, file_size: int, 
                       last_modified: int, processing_duration: float, has_motion: bool,
+                      brightness_level: Optional[float] = None,
+                      preprocessing_applied: Optional[str] = None,
                       error_message: Optional[str] = None):
         """Mark a video as processed with metadata."""
         with self.transaction() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO videos 
                 (video_hash, video_path, file_size, last_modified, processed_at, 
-                 processing_duration_sec, has_motion, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 processing_duration_sec, has_motion, brightness_level, 
+                 preprocessing_applied, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 video_hash, str(video_path), file_size, last_modified,
-                datetime.utcnow().isoformat(), processing_duration, has_motion, error_message
+                datetime.utcnow().isoformat(), processing_duration, has_motion,
+                brightness_level, preprocessing_applied, error_message
             ))
     
     def add_motion_segment(self, video_hash: str, segment_index: int, 
