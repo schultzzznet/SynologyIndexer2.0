@@ -225,6 +225,34 @@ def index():
             border-radius: 4px;
             font-size: 11px;
         }
+        .scan-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #30363d;
+        }
+        .scan-badge {
+            background: #30363d;
+            color: #8b949e;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        .scan-badge.low-light {
+            background: #1f2937;
+            color: #fbbf24;
+        }
+        .scan-badge.normal-light {
+            background: #1f2937;
+            color: #60a5fa;
+        }
+        .scan-badge.enhancement {
+            background: #581c87;
+            color: #e9d5ff;
+        }
         .status {
             padding: 15px;
             border-radius: 6px;
@@ -594,6 +622,12 @@ def index():
                 });
                 const objectsList = Array.from(allObjects);
                 
+                // Get scanning metadata from first segment
+                const firstSeg = group.segments[0];
+                const brightnessLevel = firstSeg.brightness_level;
+                const preprocessingApplied = firstSeg.preprocessing_applied;
+                const processingDuration = firstSeg.processing_duration_sec;
+                
                 // Parse date/time from filename (e.g., Fi9900P N-20260107-185348-1767808428216-7.mp4)
                 // Format: CameraType-YYYYMMDD-HHMMSS-timestamp-id.mp4
                 const filenameMatch = group.videoName.match(/-(\d{8})-(\d{6})-/);
@@ -614,6 +648,26 @@ def index():
                     displayTime = times[0];
                 }
                 
+                // Build scan details HTML
+                let scanDetailsHtml = '';
+                if (brightnessLevel !== null && brightnessLevel !== undefined) {
+                    const isLowLight = brightnessLevel < 60;
+                    const brightnessIcon = isLowLight ? '🌙' : '☀️';
+                    const brightnessClass = isLowLight ? 'low-light' : 'normal-light';
+                    scanDetailsHtml += `<div class="scan-details">`;
+                    scanDetailsHtml += `<span class="scan-badge ${brightnessClass}">${brightnessIcon} Brightness: ${brightnessLevel.toFixed(0)}</span>`;
+                    
+                    if (preprocessingApplied) {
+                        scanDetailsHtml += `<span class="scan-badge enhancement">✨ Enhanced: ${preprocessingApplied}</span>`;
+                    }
+                    
+                    if (processingDuration) {
+                        scanDetailsHtml += `<span class="scan-badge">⚙️ Scan: ${processingDuration.toFixed(1)}s</span>`;
+                    }
+                    
+                    scanDetailsHtml += `</div>`;
+                }
+                
                 return `
                     <div class="event-card">
                         <a href="/api/video?path=${encodeURIComponent(group.videoPath)}" target="_blank" style="display: block; text-decoration: none; color: inherit;">
@@ -630,6 +684,7 @@ def index():
                                 <div class="event-meta">📁 ${group.videoName}</div>
                                 <div class="event-meta">🎬 ${group.segmentCount} motion segment${group.segmentCount > 1 ? 's' : ''}</div>
                                 <div class="event-meta">⏱️ Total: ${group.totalDuration.toFixed(1)}s</div>
+                                ${scanDetailsHtml}
                                 ${objectsList.length > 0 ? `
                                     <div class="tags">
                                         ${objectsList.map(obj => `<span class="tag">🏷️ ${obj}</span>`).join('')}

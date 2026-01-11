@@ -211,6 +211,10 @@ class DatabaseManager:
             cursor = conn.execute("""
                 SELECT 
                     v.video_path,
+                    v.brightness_level,
+                    v.preprocessing_applied,
+                    v.processing_duration_sec,
+                    v.processed_at,
                     m.segment_index,
                     m.start_time,
                     m.end_time,
